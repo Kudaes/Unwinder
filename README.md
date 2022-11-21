@@ -11,7 +11,7 @@ The spoofing process overview is as follows:
 * We walk FunctionA's Unwind codes array in order to dynamically determine where the next return address is expected in the stack.
 * The word contained in the stack address obtained in the previous step is replaced by the memory address of another randomly selected Windows API function.
 * The steps 2 and 3 are repeated a random number of times, obtaining a different thread stack each iteration of the PoC. All of this thread stacks are correct from the point of view of the x64 unwinding process.
-* Once the spoof is completed, the tool calls Sleeps to allow the inpection of the thread stack state (I use Process Hacker for this step).
+* Once the spoof is completed, the tool calls Sleeps to allow the inpection of the thread stack (I use Process Hacker for this step).
 
 This process repeats indefinitely.
 
