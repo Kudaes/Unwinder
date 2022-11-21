@@ -21,7 +21,7 @@ As it can be seen in the following images, we are able to spoof the thread stack
 ![Thread stack spoofed.](/images/spoof2.png "Thread stack spoofed")
 ![Thread stack spoofed.](/images/spoof3.png "Thread stack spoofed")
 
-Additional spoofing functions can be added to the pool by enlarging the **FUNCTIONS** array located in src::main.rs.
+Additional spoofing functions can be added to the pool by enlarging the **FUNCTIONS** array located in **src::main.rs**.
 
 # Disclaimer
 
