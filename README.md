@@ -29,7 +29,7 @@ From the previous images it can be concluded that this tool **is not trying to c
 
 To use this technique in real environments and tools, it is required to analyzed valid stack secuences in order to mimic real call stacks, but this is beyond this project goals.
 
-On the other hand, im just spoofing the portion of the stack before calling the main function. If you want to fully spoof the stack a little bit of extra work have to be done, even thought it should be easy to implement. Also, im not trying to restore the original values of the stack after each iteration, which should be done if this technique is implemented in any tool.
+On the other hand, im just spoofing a portion of the stack. If you want to fully spoof the stack a little bit of extra work have to be done, even thought it should be easy to implement. Also, im not trying to restore the original values of the stack after each iteration, which should be done if this technique is implemented in any tool.
 
 Finally, not all the unwind codes have been implemented. Although I encourage anyone to add extra spoofing functions to the FUNCTIONS array, take into account that you may end up parsing unwind codes not covered by this tool, which may lead to errors in the spoofing process.
 
