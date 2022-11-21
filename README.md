@@ -25,7 +25,7 @@ Additional spoofing functions can be added to the pool by enlarging the **FUNCTI
 
 # Disclaimer
 
-From the previous images it can be concluded that this tool **is not trying to create logical stack calls** for multiple reasons. For example, none of the thread stacks shown before start with ntdll.dll!RtlUserThreadStart and I've never seen kernelbase!GetCalendarInfoEx calling kernelbase.dll!DsFreeNameResultW even thought this tools allows it. The main purpose of this tool is to show how unwind codes walking allows us to effectively and malleably spoof the thread stack.
+From the previous images it can be concluded that this tool **is not trying to create logical stack calls** for multiple reasons. For example, some of the thread stacks shown before don't start with ntdll.dll!RtlUserThreadStart and I've never seen kernelbase!GetCalendarInfoEx calling kernelbase.dll!DsFreeNameResultW even thought this tools allows it. The main purpose of this tool is to show how unwind codes walking allows us to effectively and malleably spoof the thread stack.
 
 To use this technique in real environments and tools, it is required to analyzed valid stack secuences in order to mimic real call stacks, but this is beyond this project goals.
 
