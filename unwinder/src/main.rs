@@ -74,14 +74,14 @@ fn main() {
 }
 
 /// This is the function where the main logic is implemented.
-/// get_stack_size() is in charge of parsing the unwinding information of the
+/// get_stack_size() is in charge of parsing the unwind information of the
 /// selected spoofing function, allowing the tool to dynamically obtain the stack offset 
 /// where the return address is expected.
 /// 
-/// The unwinding info is not always parsed from the beginning of the struct since in order to add an extra
-/// layer of randomness to the spoofing process a random generated offset is added to the funcion base address.
+/// The unwind info is not always parsed from the beginning of the struct since in order to add an extra
+/// layer of randomness to the spoofing process a random generated offset is added to the function's base address.
 ///  
-/// It returns the stack offset and the resulting memory address (function base addres + offset).
+/// It returns the stack offset where the return address is expected and the memory address that will be set in the stack (function base addres + offset).
 /// 
 fn get_stack_size(dll_name: &str, function_name: &str) -> (i32,isize)
 {
@@ -108,7 +108,7 @@ fn get_stack_size(dll_name: &str, function_name: &str) -> (i32,isize)
         let metadata = module_metadata.unwrap();
         let mut runtime_table = get_runtime_table(&metadata, module as *mut c_void);
         
-        // Iterate over the PE RUNTIME FUNCTION until we get the unwinding information of the spoofing function. 
+        // Iterate over the PE RUNTIME FUNCTION until we get the unwind information of the spoofing function. 
         while  (*runtime_table).begin_addr != 0 
         {
             if ((*runtime_table).begin_addr as isize + module ) == func_base_addr
@@ -118,7 +118,7 @@ fn get_stack_size(dll_name: &str, function_name: &str) -> (i32,isize)
             runtime_table = runtime_table.add(1);
         }
 
-        // In case that a leaf function has been selected, it will not have unwinding information.
+        // In case that a leaf function has been selected, it will not have unwind information.
         if (*runtime_table).begin_addr == 0
         {
             return (0,func_base_addr);
@@ -155,7 +155,7 @@ fn get_stack_size(dll_name: &str, function_name: &str) -> (i32,isize)
         unwind_code = check.0;
         start += check.1;
         // We get the Offset in prolog value contained in the first UNWIND_CODE struct that we parse.
-        // This offset will be added to the memory base address. 
+        // This offset will be added to the function's memory base address. 
         let offset = *unwind_code; 
 
         // From this point, we parse the remaining items in the Unwind codes array, obtaining the stack
@@ -268,7 +268,9 @@ fn iterate_unwind_array(module: isize, mut unwind_code: *mut u8, unwind_codes_co
             stack_count += result;
         }   
 
-        // We just return the stack offset calculated in this function
+        // We just return the stack offset calculated in this function, which means the number of 
+        // words that we should add to the stack in order to obtain the memory address where the
+        // next return address will be expected.
         stack_count
     }
 }
