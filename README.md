@@ -43,4 +43,4 @@ We need [Rust Nightly](https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404
 # Credits
 
 * [@mariuszbit](https://twitter.com/mariuszbit) for his [ThreadStackSpoofer](https://github.com/mgeeky/ThreadStackSpoofer) project that inspired me to create this tool.
-* [@namazso](https://twitter.com/namazso) for pointing me to the rigth direction.
+* [@namazso](https://twitter.com/namazso) for pointing me to the right direction.
