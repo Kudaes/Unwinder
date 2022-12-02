@@ -15,7 +15,7 @@ The spoofing process overview is as follows:
 
 This process repeats indefinitely.
 
-As it can be seen in the following images, we are able to spoof the thread stack in multiple ways. Since the number of spoofing functions and the funcions themselves are randomly selected from a pool of functions each iteration will create a different thread stack. 
+As it can be seen in the following images, we are able to spoof the thread stack in multiple ways. Since the number of spoofing functions and the functions themselves are randomly selected from a pool of functions each iteration will create a different thread stack. 
 
 ![Thread stack spoofed.](/images/spoof1.png "Thread stack spoofed")
 ![Thread stack spoofed.](/images/spoof2.png "Thread stack spoofed")
