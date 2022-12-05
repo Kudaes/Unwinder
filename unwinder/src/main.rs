@@ -41,7 +41,7 @@ fn main() {
         loop {
             let mut rng = rand::thread_rng();
             // The number of functions and the functions themselves used to spoof the stack are generated randomly.
-            // This allows to obtain a differente thread stack each iteration. 
+            // This allows to obtain a different thread stack each iteration. 
             let spoofing_count =  rng.gen_range(1..FUNCTIONS.len());
             let mut return_addr = return_address() as *mut isize;
             for _ in 0..spoofing_count
@@ -79,9 +79,10 @@ fn main() {
 /// where the return address is expected.
 /// 
 /// The unwind info is not always parsed from the beginning of the struct since in order to add an extra
-/// layer of randomness to the spoofing process a random generated offset is added to the function's base address.
+/// layer of randomness to the spoofing process a random generated offset is added to the function's base address (this offset is always
+/// within the range [function's base address, function's base address + prolog size].
 ///  
-/// It returns the stack offset where the return address is expected and the memory address that will be set in the stack (function base addres + offset).
+/// It returns the stack offset where the return address is expected and the memory address that will be set in that stack location (function base addres + offset).
 /// 
 fn get_stack_size(dll_name: &str, function_name: &str) -> (i32,isize)
 {
@@ -147,7 +148,7 @@ fn get_stack_size(dll_name: &str, function_name: &str) -> (i32,isize)
         // and Frame Register + Frame Register offset.
         // This way we reach the Unwind codes array.
         let unwind_codes = (unwind_info.add(4)) as *mut u16;
-        // We add the previously generated offset to start the array parsing from a random position. 
+        // We add the previously generated offset to start the array parsing from a random position within the fucntion's prolog. 
         let mut unwind_code = unwind_codes.add(start as usize) as *mut u8;
         // We fix any issue that may appear due to the fact that we are starting from a random and unknow
         // position inside the Unwind codes array.
@@ -268,7 +269,7 @@ fn iterate_unwind_array(module: isize, mut unwind_code: *mut u8, unwind_codes_co
             stack_count += result;
         }   
 
-        // We just return the stack offset calculated in this function, which means the number of 
+        // We just return the stack offset calculated in this function, which is the number of 
         // words that we should add to the stack in order to obtain the memory address where the
         // next return address will be expected.
         stack_count
