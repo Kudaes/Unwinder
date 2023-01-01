@@ -4,7 +4,7 @@ This [Twitter thread](https://twitter.com/namazso/status/1442313752767045635?s=2
 
 Unwinder is a PoC of how to parse PE's UNWIND_INFO structs in order to achieve "proper" thread stack spoofing from the point of view of the [x64 calling convention](https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention?view=msvc-170). 
 
-For more detailed information about how thread stacks are walked in x64 check the official [x64 exception handling documentation](https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64?view=msvc-170).
+For more detailed information about how thread stack is walked in x64 check the official [x64 exception handling documentation](https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64?view=msvc-170).
 
 The spoofing process overview is as follows:
 * We obtain the stack's memory address where the first return address is located. This return address is replaced by the memory address of a randomly selected Windows API function (let's call it FunctionA).
