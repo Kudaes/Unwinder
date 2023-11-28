@@ -3,13 +3,13 @@
 - [Description](#Decription)
 - [Credits](#Credits)
 - [Usage](#usage)
-  - [call_function!() macro](#call_function!()-macro)
-  - [indirect_syscall!() macro](#indirect_syscall!()-macro)
+  - [call_function!() macro](#call_function-macro)
+  - [indirect_syscall!() macro](#indirect_syscall-macro)
   - [Parameter passing](#Parameter-passing)
 - [Examples](#examples)
-  - [Calling kernel32.dll!Sleep()](#Calling-kernel32.dll!Sleep())
-  - [Calling kernel32.dll!OpenProcess()](#Calling-kernel32.dll!Openprocess())
-  - [Calling NtDelayExecution() as indirect syscall](#Calling-NtDelayExecution()-as-indirect-syscall)
+  - [Calling kernel32.dll!Sleep()](#Calling-Sleep
+  - [Calling kernel32.dll!OpenProcess()](#Calling-Openprocess
+  - [Calling NtDelayExecution() as indirect syscall](#Calling-NtDelayExecution-as-indirect-syscall)
   - [Concatenate macro calls](#Concatenate-macro-calls)
 - [Considerations](#Considerations)
   - [Initial frame](#Initial-frame)
@@ -30,9 +30,9 @@ This crate comes with the following characteristics:
 # Credits
 kudos to the creators of the SilentMoonWalk technique:
 
-* [KlezVirus][https://twitter.com/KlezVirus]
-* [Waldo-IRC][https://twitter.com/waldoirc]
-* [Trickster0][https://twitter.com/trickster012]
+* [KlezVirus](https://twitter.com/KlezVirus)
+* [Waldo-IRC](https://twitter.com/waldoirc)
+* [Trickster0](https://twitter.com/trickster012)
 
 And of course a huge shoutout to [namazso](https://twitter.com/namazso) for the [Twitter thread](https://twitter.com/namazso/status/1442313752767045635?s=20&t=wxBHvf95-XtkPEevjcgbPg) that inspired this whole project.
 
@@ -53,13 +53,13 @@ To use any of these macros it is required to import `std::ffi::c_void` data type
 
 Both macros return a `PVOID` that can be used to retrieve the value returned by the function executed. More detailed information in the examples section.
 
-## call_function!() macro
+## call_function macro
 
 This macro expects the following parameters:
 * The first parameter is the memory address to call after spoofing the call stack. This parameter should be passed as a `usize`, `isize` or a pointer.
 * The following parameters are those arguments to send to the final function.
 
-## indirect_syscall!() macro
+## indirect_syscall macro
 
 This macro expects the following parameters:
 * The first parameter is a string that contains the name of the NT function whose syscall you want to execute.
@@ -76,7 +76,7 @@ In order to pass arguments of different types to these two macros, the following
 * Any other data type must be passed as a pointer.
 
 # Examples
-## Calling kernel32.dll!Sleep()
+## Calling Sleep
 
 ```rust
 let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll");
@@ -84,7 +84,7 @@ let sleep = dinvoke_rs::dinvoke::get_function_address(k32, "Sleep"); // Memory a
 let miliseconds = 1000i32;
 unwinder::call_function!(sleep, seconds);
 ```
-## Calling kernel32.dll!OpenProcess()
+## Calling OpenProcess
 
 ```rust
 let k32 = dinvoke_rs::dinvoke::get_module_base_address(&lc!("kernel32.dll")); 
@@ -99,7 +99,7 @@ println!("Handle id: {:x}", handle.0);
 
 Notice that the macro returns a `PVOID` that can be directly converted to a `HANDLE` since both data types has the same size. This allows to access to the value returned by `OpenProcess`, which is the new handle to the target process.
 
-## Calling NtDelayExecution() as indirect syscall
+## Calling NtDelayExecution as indirect syscall
 
 ```rust
 let large = 0x8000000000000000 as u64; // Sleep indefinitely
@@ -118,33 +118,33 @@ The spoofing process can be concatenated any number of times without an abnormal
 fn function_a()
 {
 	unsafe
-    {
+	{
     	let func_b = function_b as usize;
     	call_function!(func_b);
     	println!("function_a done.");
-    }
+	}
 }
 
 fn function_b()
 {
 	unsafe
-    {
+	{
     	let func_c = function_c as usize;
     	call_function!(func_c);
     	println!("function_b done.")
-    }
+	}
 }
 
 fn function_c()
 {
 	unsafe
-    {
+	{
 		let large = 0x0000000000000000 as u64; // Don't sleep so we return to function_b, allowing to check the execution flow preservation.
 		let large: *mut i64 = std::mem::transmute(&large);
 		let alertable = false;
 		let ntstatus = indirect_syscall!("NtDelayExecution", alertable, large);
 		println!("ntstatus: {:x}", ntstatus as usize);
-    }
+	}
 }
 ```
 
@@ -158,7 +158,7 @@ By default, the spoofing process will try to keep the thread start address' fram
 
 Sometimes, the thread's start function does not perform a `call` to a subsequent function (a `jmp` instruction is executed instead), meaning there is not return address pushed to the stack. In that scenario, the spoofed call stack will start at BaseThreadInitThunk's frame.
 
-![Call stack spoofed without main module.](/images/no_main.png "Call stack spoofed without main module")
+![Call stack spoofed without main module.](/images/no_main.jpg "Call stack spoofed without main module")
 
 
 ## PoC
