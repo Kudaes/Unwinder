@@ -114,14 +114,18 @@ Notice that the macro returns a `PVOID` that can be used to retrieve the `NTSTAT
 
 The spoofing process can be concatenated any number of times without an abnormal call stack size increment. The execution flow will be preserved as well. The following code is an example of this:
 ```rust
+fn main()
+{
+	function_a();
+}
 
 fn function_a()
 {
 	unsafe
 	{
-    	let func_b = function_b as usize;
-    	call_function!(func_b);
-    	println!("function_a done.");
+		let func_b = function_b as usize;
+		call_function!(func_b);
+		println!("function_a done.");
 	}
 }
 
@@ -129,9 +133,9 @@ fn function_b()
 {
 	unsafe
 	{
-    	let func_c = function_c as usize;
-    	call_function!(func_c);
-    	println!("function_b done.")
+		let func_c = function_c as usize;
+		call_function!(func_c);
+		println!("function_b done.")
 	}
 }
 
@@ -143,7 +147,7 @@ fn function_c()
 		let large: *mut i64 = std::mem::transmute(&large);
 		let alertable = false;
 		let ntstatus = indirect_syscall!("NtDelayExecution", alertable, large);
-		println!("ntstatus: {:x}", ntstatus as usize);
+		println!("ntstatus: {:x}", (ntstatus as usize) as i32); //NTSTATUS is a i32, although that second casting is not really required in this case.
 	}
 }
 ```
