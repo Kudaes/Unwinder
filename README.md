@@ -153,12 +153,12 @@ fn function_c()
 
 By default, the spoofing process will try to keep the thread start address' frame in the call stack to increase legitimacy.
 
-![Call stack spoofed keeping the main module.](/images/main_kept.png "Call stack spoofed keeping the main module")
+![Call stack spoofed keeping the main module.](/images/main_kept.jpg "Call stack spoofed keeping the main module")
 
 
-Sometimes, the thread's start function does not perform a `call` to a subsequent function (a `jmp` instruction is executed instead), meaning there is not return address pushed to the stack. In that scenario, the spoofed call stack will start at BaseThreadInitThunk's frame.
+Sometimes, the thread's start function does not perform a `call` to a subsequent function (e.g. a `jmp` instruction is executed instead), meaning there is not return address pushed to the stack. In that scenario, the spoofed call stack will start at BaseThreadInitThunk's frame.
 
-![Call stack spoofed without main module.](/images/no_main.jpg "Call stack spoofed without main module")
+![Call stack spoofed without main module.](/images/no_main.png "Call stack spoofed without main module")
 
 
 ## PoC
