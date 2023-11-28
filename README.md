@@ -7,8 +7,8 @@
   - [indirect_syscall!() macro](#indirect_syscall-macro)
   - [Parameter passing](#Parameter-passing)
 - [Examples](#examples)
-  - [Calling kernel32.dll!Sleep()](#Calling-Sleep
-  - [Calling kernel32.dll!OpenProcess()](#Calling-Openprocess
+  - [Calling kernel32.dll!Sleep()](#Calling-Sleep)
+  - [Calling kernel32.dll!OpenProcess()](#Calling-Openprocess)
   - [Calling NtDelayExecution() as indirect syscall](#Calling-NtDelayExecution-as-indirect-syscall)
   - [Concatenate macro calls](#Concatenate-macro-calls)
 - [Considerations](#Considerations)
