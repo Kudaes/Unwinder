@@ -32,8 +32,8 @@ SPOOFER STRUCT
     Arg10                           DQ 1
     Arg11                           DQ 1
 
-    Sys                         	DD 0
-	SysId							DD 0
+    Sys                           DD 0
+    SysId                           DD 0
 
 SPOOFER ENDS
 
@@ -46,36 +46,16 @@ get_current_rsp proc
 get_current_rsp endp
 
 spoof_call proc
-;   ------------------------------------------------------------------------------------
-;   Saving non-vol registers
-;   ------------------------------------------------------------------------------------
+
 	mov     [rsp+08h], rbp
 	mov     [rsp+10h], rbx
-;   ------------------------------------------------------------------------------------
-;   Prolog
-;   RBP -> Keeps track of original Stack
-; 	RSP -> Desync Stack for Unwinding Info
-;   ------------------------------------------------------------------------------------
-;   Note: Everything between RSP and RBP is our new stack frame for unwinding 
-;   ------------------------------------------------------------------------------------
 	mov     rbp, rsp
 
-;   ------------------------------------------------------------------------------------
-;   Creating stack pointer to Restore PROC
-;   ------------------------------------------------------------------------------------
 	lea     rax, restore
 	push    rax
 
-;   Now RBX contains the stack pointer to Restore PROC  
-;   -> Will be called by the JMP [RBX] gadget
 	lea     rbx, [rsp]
 
-;   ------------------------------------------------------------------------------------
-;   Starting Frames Tampering
-;   ------------------------------------------------------------------------------------
-
-;   First Frame (Fake origin)
-;   ------------------------------------------------------------------------------------
 	push    [rcx].SPOOFER.FirstFrameFunctionPointer                                     
 	
 	mov     rax, [rcx].SPOOFER.ReturnAddress
@@ -84,23 +64,15 @@ spoof_call proc
 	sub     rsp, [rcx].SPOOFER.SecondFrameSize
 	mov     r10, [rcx].SPOOFER.StackOffsetWhereRbpIsPushed
 	mov     [rsp+r10], rax 
-;   ------------------------------------------------------------------------------------
-;   ROP Frames
-;   ------------------------------------------------------------------------------------
+
 	push    [rcx].SPOOFER.SecondFrameFunctionPointer
-;   ------------------------------------------------------------------------------------
-;   	1. JMP [RBX] Gadget
-;   ------------------------------------------------------------------------------------
+
 	sub     rsp, [rcx].SPOOFER.JmpRbxGadgetFrameSize
 	push    [rcx].SPOOFER.JmpRbxGadget
 	sub     rsp, [rcx].SPOOFER.AddRspXGadgetFrameSize
-;   ------------------------------------------------------------------------------------
-;   	2. Stack PIVOT (To restore original Control Flow Stack)
-;   ------------------------------------------------------------------------------------
+
 	push    [rcx].SPOOFER.AddRspXGadget
-;   ------------------------------------------------------------------------------------
-;   Set the pointer to the function to call in R11
-;   ------------------------------------------------------------------------------------
+
 	mov     r11, [rcx].SPOOFER.SpoofFunctionPointer
 	jmp     parameter_handler
 spoof_call endp

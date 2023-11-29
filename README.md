@@ -47,7 +47,7 @@ unwinder = "0.1.0"
 
 The main functionality of this crate has been wrapped in two macros:
 * The `call_function!()` macro allows to run any arbitrary function with a clean call stack.
-* The `indirect_syscall()` macro executes the specified (indirect) syscall with a clean call stack.
+* The `indirect_syscall!()` macro executes the specified (indirect) syscall with a clean call stack.
 
 To use any of these macros it is required to import `std::ffi::c_void` data type.
 
@@ -92,7 +92,7 @@ let open_process: isize = dinvoke_rs::dinvoke::get_function_address(k32, "Openpr
 let desired_access: u32 = 0x1000;
 let inherit = 0i32;
 let pid = 20628i32;
-let handle: PVOID = call_function!(open_process, desired_access, inherit, pid);
+let handle: PVOID = unwinder::call_function!(open_process, desired_access, inherit, pid);
 let handle: HANDLE = std::mem::transmute(handle);
 println!("Handle id: {:x}", handle.0);
 ```
