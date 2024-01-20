@@ -42,7 +42,7 @@ Import this crate into your project by adding the following line to your `cargo.
 
 ```rust
 [dependencies]
-unwinder = "0.1.0"
+unwinder = "0.1.1"
 ```
 
 The main functionality of this crate has been wrapped in two macros:
@@ -55,14 +55,18 @@ Both macros return a `PVOID` that can be used to retrieve the value returned by 
 
 ## call_function macro
 
-This macro expects the following parameters:
+This macro is used to call any desired function with a clean call stack.
+The macro expects the following parameters:
 * The first parameter is the memory address to call after spoofing the call stack. This parameter should be passed as a `usize`, `isize` or a pointer.
-* The following parameters are those arguments to send to the final function.
+* The second parameter is a bool indicating whether or not keep the start function frame. If you are not sure about this, set it to false which always guarantees a good call stack.
+* The following parameters are those arguments to send to the function once the call stack has been spoofed.
 
 ## indirect_syscall macro
 
-This macro expects the following parameters:
+This macro is used to perform any desired indirect syscall with a clean call stack.
+The macro expects the following parameters:
 * The first parameter is a string that contains the name of the NT function whose syscall you want to execute.
+* The second parameter is a bool indicating whether or not keep the start function frame. If you are not sure about this, set it to false which always guarantees a good call stack.
 * The following parameters are those arguments to send to the NT function.
 
 ## Parameter passing
@@ -82,12 +86,12 @@ In order to pass arguments of different types to these two macros, the following
 let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll");
 let sleep = dinvoke_rs::dinvoke::get_function_address(k32, "Sleep"); // Memory address of kernel32.dll!Sleep() 
 let miliseconds = 1000i32;
-unwinder::call_function!(sleep, seconds);
+unwinder::call_function!(sleep, false, seconds);
 ```
 ## Calling OpenProcess
 
 ```rust
-let k32 = dinvoke_rs::dinvoke::get_module_base_address(&lc!("kernel32.dll")); 
+let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll"); 
 let open_process: isize = dinvoke_rs::dinvoke::get_function_address(k32, "Openprocess");
 let desired_access: u32 = 0x1000;
 let inherit = 0i32;
@@ -105,7 +109,7 @@ Notice that the macro returns a `PVOID` that can be directly converted to a `HAN
 let large = 0x8000000000000000 as u64; // Sleep indefinitely
 let large: *mut i64 = std::mem::transmute(&large);
 let alertable = false;
-let ntstatus: PVOID = unwinder::indirect_syscall!("NtDelayExecution", alertable, large);
+let ntstatus: PVOID = unwinder::indirect_syscall!("NtDelayExecution", false, alertable, large);
 println!("ntstatus: {:x}", ntstatus as usize);
 ```
 Notice that the macro returns a `PVOID` that can be used to retrieve the `NTSTATUS` returned by `NtDelayExecution`.
@@ -124,7 +128,7 @@ fn function_a()
 	unsafe
 	{
 		let func_b = function_b as usize;
-		call_function!(func_b);
+		call_function!(func_b, false);
 		println!("function_a done.");
 	}
 }
@@ -134,7 +138,7 @@ fn function_b()
 	unsafe
 	{
 		let func_c = function_c as usize;
-		call_function!(func_c);
+		call_function!(func_c, false);
 		println!("function_b done.")
 	}
 }
@@ -146,7 +150,7 @@ fn function_c()
 		let large = 0x0000000000000000 as u64; // Don't sleep so we return to function_b, allowing to check the execution flow preservation.
 		let large: *mut i64 = std::mem::transmute(&large);
 		let alertable = false;
-		let ntstatus = indirect_syscall!("NtDelayExecution", alertable, large);
+		let ntstatus = indirect_syscall!("NtDelayExecution", false, alertable, large);
 		println!("ntstatus: {:x}", (ntstatus as usize) as i32); //NTSTATUS is a i32, although that second casting is not really required in this case.
 	}
 }
@@ -155,12 +159,12 @@ fn function_c()
 # Considerations
 ## Initial frame
 
-By default, the spoofing process will try to keep the thread start address' frame in the call stack to increase legitimacy.
+If you set the second parameter to true (both macros), the spoofing process will try to keep the thread start address' frame in the call stack to increase legitimacy.
 
 ![Call stack spoofed keeping the main module.](/images/main_kept.jpg "Call stack spoofed keeping the main module")
 
 
-Sometimes, the thread's start function does not perform a `call` to a subsequent function (e.g. a `jmp` instruction is executed instead), meaning there is not return address pushed to the stack. In that scenario, the spoofed call stack will start at BaseThreadInitThunk's frame.
+Sometimes, the thread's start function does not perform a `call` to a subsequent function (e.g. a `jmp` instruction is executed instead), meaning there is not return address pushed to the stack. In that scenario (and also if you set that second parameter to false), the spoofed call stack will start at BaseThreadInitThunk's frame.
 
 ![Call stack spoofed without main module.](/images/no_main.png "Call stack spoofed without main module")
 

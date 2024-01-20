@@ -1,6 +1,6 @@
 [package]
 name = "unwinder"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [profile.dev]
@@ -11,11 +11,11 @@ debug-assertions = false # required to avoid misaligned pointer dereference pani
 strip = true  
 
 [dependencies]
-dinvoke_rs = "0.1.2"
+dinvoke_rs = "0.1.4"
 bitreader = "0.3.8"
 nanorand = "0.7.0"
 winapi = "0.3.9"
-litcrypt2 = "0.1.0"
+litcrypt2 = "0.1.2"
 
 [build-dependencies]
 cc = "1.0.83"

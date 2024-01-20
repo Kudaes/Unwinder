@@ -6,9 +6,9 @@ use_litcrypt!();
 use std::{ffi::c_void, ptr::{self}, mem::transmute, vec};
 use nanorand::{WyRand, Rng};
 
-use windows::Win32::{System::{Diagnostics::Debug::{IMAGE_OPTIONAL_HEADER32, IMAGE_SECTION_HEADER}, Threading::GetCurrentThread}, Foundation::HANDLE};
+use windows::Win32::System::Threading::GetCurrentThread;
 use bitreader::BitReader;
-use dinvoke_rs::data::{PeMetadata, ImageFileHeader, ImageOptionalHeader64, RuntimeFunction, UNW_FLAG_EHANDLER, UNW_FLAG_CHAININFO, PVOID, JMP_RBX, ADD_RSP, TLS_OUT_OF_INDEXES};
+use dinvoke_rs::data::{RuntimeFunction, UNW_FLAG_EHANDLER, UNW_FLAG_CHAININFO, PVOID, JMP_RBX, ADD_RSP, TLS_OUT_OF_INDEXES};
 
 extern "C"
 {
@@ -52,8 +52,11 @@ static mut INDEX: u32 = 0;
 /// This macro will make sure the thread has a clean and unwindable call stack
 /// before calling the specified function.
 /// 
-/// The first parameter expected by the macro is the memory address of the function to call. The
-/// following parameters should be the arguments to pass to the specified function.
+/// The first parameter expected by the macro is the memory address of the function to call. 
+/// The second parameter is a bool indicating whether or not keep the start function frame. If you are not
+/// sure about this, set it to false which always guarantees a clean call stack. 
+/// 
+/// The following parameters should be the arguments to pass to the specified function.
 /// 
 /// The macro's return parameter is the same value returned by the specified function.
 /// 
@@ -63,7 +66,7 @@ static mut INDEX: u32 = 0;
 /// let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll");
 /// let sleep = dinvoke_rs::dinvoke::get_function_address(k32, "Sleep"); // Memory address of kernel32.dll!Sleep() 
 /// let miliseconds = 1000i32;
-/// unwinder::call_function!(sleep, seconds);
+/// unwinder::call_function!(sleep, false, seconds);
 /// ```
 /// 
 #[macro_export]
@@ -88,8 +91,11 @@ macro_rules! call_function {
 /// This macro will make sure the thread has a clean and unwindable call stack
 /// before executing the syscall for the specified NT function.
 /// 
-/// The first parameter expected by the macro is the name of the function whose syscall wants to be run. The
-/// following parameters should be the arguments expected by the specified syscall.
+/// The first parameter expected by the macro is the name of the function whose syscall wants to be run. 
+/// The second parameter is a bool indicating whether or not keep the start function frame. If you are not
+/// sure about this, set it to false which always guarantees a clean call stack. 
+/// 
+/// The following parameters should be the arguments expected by the specified syscall.
 /// 
 /// The macro's return parameter is the same value returned by the syscall.
 /// 
@@ -99,7 +105,7 @@ macro_rules! call_function {
 /// let large = 0x8000000000000000 as u64; // Sleep indefinitely
 /// let large: *mut i64 = std::mem::transmute(&large);
 /// let alertable = false;
-/// let ntstatus = unwinder::indirect_syscall!("NtDelayExecution", alertable, large);
+/// let ntstatus = unwinder::indirect_syscall!("NtDelayExecution", false, alertable, large);
 /// println!("ntstatus: {:x}", ntstatus as usize);
 /// ```
 /// 
@@ -128,7 +134,7 @@ pub fn spoof_and_call(mut args: Vec<*mut c_void>, is_syscall: bool, id: u32) -> 
 {
     unsafe
     {
-        if is_syscall && (id == 0)
+        if is_syscall && (id == u32::MAX)
         {
             return ptr::null_mut();
         }
@@ -162,6 +168,17 @@ pub fn spoof_and_call(mut args: Vec<*mut c_void>, is_syscall: bool, id: u32) -> 
         config.syscall = is_syscall as u32;
         config.syscall_id = id;
         
+        let keep = args.remove(0) as usize;
+        let keep_start_function_frame;
+        if keep == 0
+        {
+            keep_start_function_frame = false;
+        }
+        else 
+        {
+            keep_start_function_frame = true;
+        }
+
         let mut args_number = args.len();
         config.nargs = args_number;
 
@@ -190,7 +207,7 @@ pub fn spoof_and_call(mut args: Vec<*mut c_void>, is_syscall: bool, id: u32) -> 
         if spoofy == 0
         {
             let current_rsp = get_current_rsp();
-            spoofy = get_desirable_return_address(current_rsp);           
+            spoofy = get_desirable_return_address(current_rsp, keep_start_function_frame);           
         }
 
         config.return_address = spoofy as *mut _; 
@@ -202,12 +219,11 @@ pub fn spoof_and_call(mut args: Vec<*mut c_void>, is_syscall: bool, id: u32) -> 
 
 // This functions will returns the main module's frame address in the stack.
 // If it fails to do so, it will return the BaseThreadInitThunk's frame address instead.
-fn get_desirable_return_address(current_rsp: usize) -> usize
+fn get_desirable_return_address(current_rsp: usize, keep_start_function_frame: bool )-> usize
 {
     unsafe
     {
         let k32 = dinvoke_rs::dinvoke::get_module_base_address(&lc!("kernel32.dll"));
-        let ntdll = dinvoke_rs::dinvoke::get_module_base_address(&lc!("ntdll.dll"));
         let mut addr: usize = 0;
         let mut start_address = 1; 
         let mut end_address = 0;
@@ -221,32 +237,33 @@ fn get_desirable_return_address(current_rsp: usize) -> usize
         let thread_info_len = 8u32;
         let ret_len = 0u32;
         let ret_len: *mut u32 = std::mem::transmute(&ret_len);
-        let funct: unsafe extern "system" fn (HANDLE, u32, PVOID, u32, *mut u32) -> i32;
-        let ret: Option<i32>;
-        // Obtain current thread's start address
-        dinvoke_rs::dinvoke::dynamic_invoke!(ntdll,&lc!("NtQueryInformationThread"), funct, ret, thread_handle, thread_info_class, thread_information, thread_info_len, ret_len);
-
-        if ret.is_some() && ret.unwrap() == 0 
+        if keep_start_function_frame
         {
-            let thread_information = thread_information as *mut usize; 
+            // Obtain current thread's start address
+            let ret = dinvoke_rs::dinvoke::nt_query_information_thread(thread_handle, thread_info_class, thread_information, thread_info_len, ret_len);
 
-            let flags = 0x00000004;
-            let function_address: *const u8 = *thread_information as _;
-            let module_handle = 0usize;
-            let module_handle: *mut usize = std::mem::transmute(&module_handle);
-            let funct: unsafe extern "system" fn (i32,*const u8,*mut usize) -> bool;
-            let ret: Option<bool>;
-            // Determine the module where the current thread's start function is located at.
-            dinvoke_rs::dinvoke::dynamic_invoke!(k32,&lc!("GetModuleHandleExA"),funct,ret,flags,function_address,module_handle);
-
-            if ret.is_some() && ret.unwrap()
+            if ret == 0 
             {
-                let base_address = *module_handle;
-                let function_addresses = get_function_size(base_address, function_address as _);
-                start_address = function_addresses.0;
-                end_address = function_addresses.1;
-            }
-        }  
+                let thread_information = thread_information as *mut usize; 
+
+                let flags = 0x00000004;
+                let function_address: *const u8 = *thread_information as _;
+                let module_handle = 0usize;
+                let module_handle: *mut usize = std::mem::transmute(&module_handle);
+
+                // Determine the module where the current thread's start function is located at.
+                let ret = dinvoke_rs::dinvoke::get_module_handle_ex_a(flags, function_address, module_handle);
+
+                if ret
+                {
+                    let base_address = *module_handle;
+                    let function_addresses = get_function_size(base_address, function_address as _);
+                    start_address = function_addresses.0;
+                    end_address = function_addresses.1;
+                }
+            }  
+        }
+       
 
         let mut stack_iterator: *mut usize = current_rsp as *mut usize;
         let mut found = false;
@@ -271,7 +288,7 @@ fn get_desirable_return_address(current_rsp: usize) -> usize
     }
 }
 
-// TLS is used to store the main module's/BaseThreadInitThunk's frame address in the stack.
+// TLS is used to store the main module's/BaseThreadInitThunk's frame top address in the stack.
 // This allows to efficiently concatenate the spoofing process as many times as needed.
 fn get_cookie_value() -> usize
 {
@@ -345,28 +362,41 @@ pub fn prepare_syscall(function_name: &str) -> (u32, usize)
     let ntdll = dinvoke_rs::dinvoke::get_module_base_address(&lc!("ntdll.dll"));
     let eat = dinvoke_rs::dinvoke::get_ntdll_eat(ntdll);
     let id = dinvoke_rs::dinvoke::get_syscall_id(&eat, function_name);
-    if id != -1
+    if id != u32::MAX
     {
-        let max_range = eat.len();
-        let mut rng = WyRand::new();
-        let mut function = &"".to_string();
-        for s in eat.values()
+        
+        let function_addr = dinvoke_rs::dinvoke::get_function_address(ntdll, function_name);
+        let syscall_addr: usize = dinvoke_rs::dinvoke::find_syscall_address(function_addr as usize);
+        if syscall_addr != 0
         {
-            let index = rng.generate_range(0..max_range);
-            if index < max_range / 10
-            {
-                function = s;
-                break;
-            }
+            return (id as u32,syscall_addr);
         }
 
-        let function_addr = dinvoke_rs::dinvoke::get_function_address(ntdll, function);
-        let syscall_addr = dinvoke_rs::dinvoke::find_syscall_address(function_addr as usize);
+        let max_range = eat.len();
+        let mut rng: WyRand = WyRand::new();
+        loop 
+        {
+            let mut function = &"".to_string();
+            for s in eat.values()
+            {
+                let index = rng.generate_range(0..max_range);
+                if index < max_range / 5
+                {
+                    function = s;
+                    break;
+                }
+            }
 
-        return (id as u32,syscall_addr);
+            let function_addr = dinvoke_rs::dinvoke::get_function_address(ntdll, function);
+            let syscall_addr: usize = dinvoke_rs::dinvoke::find_syscall_address(function_addr as usize);
+            if syscall_addr != 0
+            {
+                return (id as u32,syscall_addr);
+            }   
+        }
     }
     
-    (0,0)
+    (u32::MAX,0)
 }
 
 // Function used to find the JMP RBX and ADD RSP gadgets.
@@ -477,10 +507,10 @@ fn find_pushrbp(module: usize, frame_size: &mut i32, push_offset: &mut i32, blac
         }
         
         let items = exception_directory.1 / 12;
-        let mut count = 0;
         let mut rng = WyRand::new();
         let rt_offset = rng.generate_range(0..(items/2));
         rt = rt.add(rt_offset as usize);
+        let mut count = rt_offset;
         while count < items
         {   
             let runtime_function = *rt;
@@ -1076,13 +1106,15 @@ fn get_frame_size_with_push_rbp(module: usize, runtime_function: RuntimeFunction
     
 }
 
-// Obtain a pointer to the Exception data of an arbitrary module
+/// Returns a pair containing a pointer to the Exception data of an arbitrary module and the size of the  
+/// corresponding PE section (.pdata). In case that it fails to retrieve this information, it returns
+/// null values.
 fn get_runtime_table(image_ptr: *mut c_void) -> (*mut dinvoke_rs::data::RuntimeFunction, u32)
 {
     unsafe 
     {
         let mut size: u32 = 0;
-        let module_metadata = get_pe_metadata(image_ptr as *const u8);
+        let module_metadata = dinvoke_rs::manualmap::get_pe_metadata(image_ptr as *const u8);
         if !module_metadata.is_ok()
         {
             return (ptr::null_mut(), size);
@@ -1105,59 +1137,4 @@ fn get_runtime_table(image_ptr: *mut c_void) -> (*mut dinvoke_rs::data::RuntimeF
         return (runtime, size);
     }
 
-}
-
-// Parse PE metadata of an arbitrary module
-fn get_pe_metadata (module_ptr: *const u8) -> Result<PeMetadata,String>
-{
-    let mut pe_metadata= PeMetadata::default();
-
-    unsafe {
-
-        
-        let e_lfanew = *((module_ptr as usize + 0x3C) as *const u32);
-        pe_metadata.pe = *((module_ptr as usize + e_lfanew as usize) as *const u32);
-
-        if pe_metadata.pe != 0x4550 
-        {
-            let m: &String = &lc!("[x] Invalid PE signature.");
-            return Err(m.clone());
-        }
-
-        pe_metadata.image_file_header = *((module_ptr as usize + e_lfanew as usize + 0x4) as *mut ImageFileHeader);
-
-        let opt_header: *const u16 = (module_ptr as usize + e_lfanew as usize + 0x18) as *const u16; 
-        let pe_arch = *(opt_header);
-
-        if pe_arch == 0x010B
-        {
-            pe_metadata.is_32_bit = true;
-            let opt_header_content: *const IMAGE_OPTIONAL_HEADER32 = std::mem::transmute(opt_header);
-            pe_metadata.opt_header_32 = *opt_header_content;
-        }
-        else if pe_arch == 0x020B 
-        {
-            pe_metadata.is_32_bit = false;
-            let opt_header_content: *const ImageOptionalHeader64 = std::mem::transmute(opt_header);
-            pe_metadata.opt_header_64 = *opt_header_content;
-        } 
-        else 
-        {
-            let m: &String = &lc!("[x] Invalid magic value.");
-            return Err(m.clone());
-        }
-
-        let mut sections: Vec<IMAGE_SECTION_HEADER> = vec![];
-
-        for i in 0..pe_metadata.image_file_header.number_of_sections
-        {
-            let section_ptr = (opt_header as usize + pe_metadata.image_file_header.size_of_optional_header as usize + (i * 0x28) as usize) as *const u8;
-            let section_ptr: *const IMAGE_SECTION_HEADER = std::mem::transmute(section_ptr);
-            sections.push(*section_ptr);
-        }
-
-        pe_metadata.sections = sections;
-
-        Ok(pe_metadata)
-    }
 }
