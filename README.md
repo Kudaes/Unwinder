@@ -75,8 +75,9 @@ In order to pass arguments of different types to these two macros, the following
 * Any basic data type that can be converted to `usize` (u8-u64, i8-i64, bool, etc.) can be passed directly to the macros.
 * Structs and unions of size 8, 16, 32, or 64 bits are passed as if they were integers of the same size.
 * Structures and unions with a size larger than 64 bits must be passed as a pointer.
-* Strings (&str and String) must be passed as a pointer.
-* floating-point and double-precision parameter are not currently supported. 
+* Strings (`&str` and `String`) must be passed as a pointer.
+* Null pointers (`ptr::null()`, `ptr::null_mut()`, etc. ) are passed as a 0 (no matter if it is `u8`, `u16`, `i32` or any other).
+* Floating-point and double-precision parameters are not currently supported. 
 * Any other data type must be passed as a pointer.
 
 # Examples
@@ -86,7 +87,7 @@ In order to pass arguments of different types to these two macros, the following
 let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll");
 let sleep = dinvoke_rs::dinvoke::get_function_address(k32, "Sleep"); // Memory address of kernel32.dll!Sleep() 
 let miliseconds = 1000i32;
-unwinder::call_function!(sleep, false, seconds);
+unwinder::call_function!(sleep, false, miliseconds);
 ```
 ## Calling OpenProcess
 
@@ -96,12 +97,12 @@ let open_process: isize = dinvoke_rs::dinvoke::get_function_address(k32, "Openpr
 let desired_access: u32 = 0x1000;
 let inherit = 0i32;
 let pid = 20628i32;
-let handle: PVOID = unwinder::call_function!(open_process, desired_access, inherit, pid);
+let handle: *mut c_void = unwinder::call_function!(open_process, desired_access, inherit, pid);
 let handle: HANDLE = std::mem::transmute(handle);
 println!("Handle id: {:x}", handle.0);
 ```
 
-Notice that the macro returns a `PVOID` that can be directly converted to a `HANDLE` since both data types has the same size. This allows to access to the value returned by `OpenProcess`, which is the new handle to the target process.
+Notice that the macro returns a `*mut c_void` that can be directly converted to a `HANDLE` since both data types has the same size. This allows to access to the value returned by `OpenProcess`, which is the new handle to the target process.
 
 ## Calling NtDelayExecution as indirect syscall
 
@@ -109,10 +110,10 @@ Notice that the macro returns a `PVOID` that can be directly converted to a `HAN
 let large = 0x8000000000000000 as u64; // Sleep indefinitely
 let large: *mut i64 = std::mem::transmute(&large);
 let alertable = false;
-let ntstatus: PVOID = unwinder::indirect_syscall!("NtDelayExecution", false, alertable, large);
+let ntstatus: *mut c_void = unwinder::indirect_syscall!("NtDelayExecution", false, alertable, large);
 println!("ntstatus: {:x}", ntstatus as usize);
 ```
-Notice that the macro returns a `PVOID` that can be used to retrieve the `NTSTATUS` returned by `NtDelayExecution`.
+Notice that the macro returns a `*mut c_void` that can be used to retrieve the `NTSTATUS` returned by `NtDelayExecution`.
 
 ## Concatenate macro calls
 

