@@ -47,13 +47,13 @@ pub struct NewStackInfo
     total_size: usize,
 }
 
-#[repr(C)] //CHECK THAT THIS DOESN'T BREAK IT
+#[repr(C)] 
 struct Configuration
 {
-    god_gadget: usize,
-    rtl_unwind_address: usize,
-    rtl_unwind_target: usize,
-    stub: usize,
+    god_gadget: usize, // Unsed atm
+    rtl_unwind_address: usize, // Unsed atm
+    rtl_unwind_target: usize, // Unsed atm
+    stub: usize, // Unsed atm
     first_frame_function_pointer: PVOID,
 	second_frame_function_pointer: PVOID,
 	jmp_rbx_gadget: PVOID,
@@ -89,10 +89,45 @@ static mut BASE_ADDRESS: usize = 0; // Current module's base address
 #[cfg(feature = "Experimental")]
 lazy_static! {
     // Original return address -> key
-    // Spoofed return address -> value
+    // Replacement return address -> value
     pub static ref MAP: Arc<Mutex<HashMap<usize,usize>>> = Arc::new(Mutex::new(HashMap::default()));
 }
 
+/// The `spoof_and_continue` macro is designed to spoof the last return address in the call stack to conceal the presence of anomalous entries. 
+///
+/// This macro calculates the size of the last frame at runtime and searches for another function with the same size in a legitimately loaded DLL within 
+/// the current process. The legitimate function is used then as replacement return address, allowing to hide the last entry in the call stack.
+///
+/// The real replaced return addresses are stored in an internal structure so they can be restored later when the `restore` macro is called.
+///
+/// To use this macro, the `start_replacement` macro must have been called previously in another function to initialize the necessary structures. Any
+/// function calling this macro should declare the `#[inline(never)]` attribute (exported functions through the `#[no_mangle]` attribute doest not need to 
+/// additionally declare the inline attribute).
+///
+/// # Example
+///
+/// ```rust
+/// #[inline(never)] // This attribute is mandatory for any function calling this macro
+/// fn another_function() -> bool
+/// {
+///     unwinder::spoof_and_continue();
+///     ...
+///     unwinder::restore();
+///     
+///     true
+/// } 
+/// 
+/// #[no_mangle]
+/// fn your_program_entry(base_address: usize) -> bool
+/// {
+///     unwinder::start_replacement!(base_address);
+///     let r = another_function();
+///     unwinder::end_replacement!();
+/// 
+///     r
+/// }
+/// ```
+///
 #[cfg(feature = "Experimental")]
 #[macro_export]
 macro_rules! spoof_and_continue {
@@ -100,14 +135,21 @@ macro_rules! spoof_and_continue {
     () => {{
         unsafe
         {
+            
+            //  We get the current function's frame size by iterating the current module's
+            //  unwinding info looking for the function's address.
             let current_function_address = $crate::get_current_function_address();
             let current_function_size = $crate::get_frame_size_from_address(current_function_address);
 
+            //  We get the current position of RSP, which combined with the current frame size
+            //  allows us to obtain the position in the stack of the return address to spoof.
             let current_rsp = $crate::get_current_rsp() as *mut usize;
             let n = current_function_size/8;
             let return_address_ptr = current_rsp.add(n as _);
             let return_address: usize = *return_address_ptr;
 
+            //  We check if the original return address has already being processed, in which case the pre calculated
+            //  replacement return address is retrieved. Otherwise, We calculate a replacement return address. 
             let map = std::sync::Arc::clone(&$crate::MAP);
             let mut map = map.lock().unwrap();
             if let Some(h) = map.get_mut(&return_address) {
@@ -115,12 +157,15 @@ macro_rules! spoof_and_continue {
             }
             else 
             {
+                //  We get the last frame size by iterating the current module's unwinding info.
                 let replacement_function_size = $crate::get_frame_size_from_address(return_address);
                 let mut black_list: Vec<usize> = vec![];
                 for (_, value) in map.iter() {
                 black_list.push(*value);
                 }
 
+                //  We look for a legitimate return address contained in a function with the same frame size as that of
+                //  as previously calculated. Once found a legitimate replacement, the return address is spoofed.
                 let replacement_frame = $crate::get_frame_of_size(replacement_function_size, black_list, false);
                 *return_address_ptr = replacement_frame;
                 map.insert(return_address, replacement_frame);
@@ -129,6 +174,39 @@ macro_rules! spoof_and_continue {
     }}
 }
 
+/// The `restore` macro is the inverse of the `spoof_and_continue` macro.
+///
+/// This macro should be called at the end of all functions that have called the `spoof_and_continue` macro.
+/// Its primary objective is to restore the return address to its original value, allowing the program to continue
+/// normal execution.
+///
+/// Similar to the `spoof_and_continue` macro, any function that calls the `restore` macro must declare the attribute
+/// `#[inline(never)]`, unless the function is exported using the `#[no_mangle]` attribute, in which case the `#[inline(never)]`
+/// attribute is not required.
+///
+/// # Example
+///
+/// ```rust
+/// #[inline(never)] // This attribute is mandatory for any function calling this macro
+/// fn another_function() -> bool
+/// {
+///     unwinder::spoof_and_continue();
+///     ...
+///     unwinder::restore();
+///     
+///     true
+/// } 
+/// 
+/// #[no_mangle]
+/// fn your_program_entry(base_address: usize) -> bool
+/// {
+///     unwinder::start_replacement!(base_address);
+///     let r = another_function();
+///     unwinder::end_replacement!();
+/// 
+///     r
+/// }
+/// ```
 #[cfg(feature = "Experimental")]
 #[macro_export]
 macro_rules! restore {
@@ -136,6 +214,8 @@ macro_rules! restore {
     () => {{
         unsafe
         {
+            //  We calculate the position in the stack where the return address is located and we
+            //  restore its value to that of the original address, allowing the program to continue the normal execution.
             let current_function_address = $crate::get_current_function_address();
             let current_function_size = $crate::get_frame_size_from_address(current_function_address);
 
@@ -158,26 +238,88 @@ macro_rules! restore {
     }}
 }
 
+/// The `start_replacement` macro initiates the stack replacement process.
+///
+/// This macro expects a single parameter of type `usize`. This parameter represents
+/// the base memory address of the current module, or zero if the base address is unknown.
+///
+/// If a non-zero memory address is provided, the macro will use it to locate information
+/// regarding the module. If zero is passed, the macro will perform its own process to
+/// determine the base memory address.
+///
+/// The primary goal of this macro is to initiate the stack replacement process. 
+/// To achieve this, it initializes all necessary structures and creates a clean stack
+/// on top of the existing one. This new stack will be used by the program until the
+/// `end_replacement` macro is called, allowing to have a clean call stack during the execution of your code.
+///
+/// # Parameters
+///
+/// - `base_address: usize`: The base memory address of the current module or zero.
+///
+/// # Example
+///
+/// ```rust
+/// #[no_mangle]
+/// fn your_program_entry(base_address: usize) -> bool
+/// {
+///     unwinder::start_replacement!(base_address);
+///     ...
+///     unwinder::end_replacement!();
+/// 
+///     true
+/// }
+/// ```
 #[cfg(feature = "Experimental")]
 #[macro_export]
 macro_rules! start_replacement {
-    () =>
+    ($x:expr) =>
     {
         unsafe
         {
-            let start = $crate::start_stack_replacement(0);
+            //  The start_stack_replacement function locates the current module's base address if it has not 
+            //  been specified when calling the macro. With that address, it locates the module's unwind data
+            //  to be used later on.
+            let start = $crate::start_stack_replacement($x);
+            
+            //  We get the current function's frame size and other data required to create a new stack on top
+            //  of the existing one that will be used by this and any nested function being called from now on.
             let address = $crate::get_current_function_address();
-    
-            let mut base_pointer = false;
+            let mut base_pointer = false; // This variable is unused at the moment.
             let current_function_size = $crate::get_frame_size_from_address(address);
-    
+            
             let structure = $crate::get_info_structure(current_function_size as usize);
             let structure: *mut c_void = std::mem::transmute(&structure);
+            //  The start_replacement stub creates the new stack and moves the current frame's contents to their new locations.
             $crate::start_replacement(structure);
         }
     } 
 } 
 
+/// The `end_replacement` macro finalizes the stack replacement process.
+///
+/// Its primary function is to restore the stack state to what it was before
+/// the `start_replacement` macro was called, allowing to continue the execution outside
+/// of the current module.
+///
+/// Calling this macro ends the stack replacement process, ensuring that all necessary
+/// structures and states are properly restored.
+///
+/// This macro should be called at the end of the same function that made the call to the
+/// `start_replacement` macro.
+///  
+/// # Example
+///
+/// ```rust
+/// #[no_mangle]
+/// fn your_program_entry(base_address: usize) -> bool
+/// {
+///     unwinder::start_replacement!(base_address);
+///     ...
+///     unwinder::end_replacement!();
+/// 
+///     true
+/// }
+/// ```
 #[cfg(feature = "Experimental")]
 #[macro_export]
 macro_rules! end_replacement {
@@ -185,6 +327,7 @@ macro_rules! end_replacement {
     {
         unsafe
         {
+            // We just remove the previously crafted new stack, restoring the previous state.
             let address = $crate::get_current_function_address();
             let current_function_size = $crate::get_frame_size_from_address(address);
     
@@ -195,6 +338,52 @@ macro_rules! end_replacement {
     }
 } 
 
+/// The `replace_and_call` macro is used to apply stack replacement when calling a function that resides outside of the current module.
+///
+/// This macro acts as a gateway, spoofing the last entry in the call stack before jumping to the memory address of the specified function.
+/// 
+/// To use this macro, the `start_replacement` macro must have been called previously in another function to initialize the necessary structures. Any
+/// function calling this macro should declare the `#[inline(never)]` attribute (exported functions using the `#[no_mangle]` attribute doest not need to 
+/// additionally declare the inline attribute).
+/// 
+/// The first parameter the macro expects is the memory address of the function to be called after applying the stack replacement process.
+/// The rest of the parameters are the arguments to be passed to the specified function.
+/// 
+/// The return value of the macro is the same as the return value of the function specified in the first parameter.
+///
+/// # Parameters
+///
+/// - `function_address: usize`: The memory address of the function to be called.
+/// - `args...`: The arguments to be passed to the function.
+///
+/// # Example
+///
+/// ```rust
+/// #[inline(never)] // This attribute is mandatory for any function calling this macro
+/// fn another_function() -> bool
+/// {
+///     unwinder::spoof_and_continue();
+///     ...
+///     let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll");
+///     let sleep = dinvoke_rs::dinvoke::get_function_address(k32, "Sleep"); // Memory address of kernel32.dll!Sleep() 
+///     let miliseconds = 1000i32;
+///     unwinder::replace_and_call!(sleep, false, miliseconds);
+///     ...
+///     unwinder::restore();
+///     
+///     true
+/// } 
+/// 
+/// #[no_mangle]
+/// fn your_program_entry(base_address: usize) -> bool
+/// {
+///     unwinder::start_replacement!(base_address);
+///     let r = another_function();
+///     unwinder::end_replacement!();
+/// 
+///     r
+/// }
+/// ```
 #[cfg(feature = "Experimental")]
 #[macro_export]
 macro_rules! replace_and_call {
@@ -216,6 +405,54 @@ macro_rules! replace_and_call {
     }}
 }
 
+/// The `replace_and_syscall` macro is used to apply stack replacement when performing an indirect syscall.
+///
+/// This macro acts as a gateway, spoofing the last entry in the call stack before executing the indirect syscall
+/// to the specified NT function.
+///
+/// To use this macro, the `start_replacement` macro must have been called previously in another function to initialize the necessary structures. Any
+/// function calling this macro should declare the `#[inline(never)]` attribute (exported functions using the `#[no_mangle]` attribute doest not need to 
+/// additionally declare the inline attribute).
+/// 
+/// The first parameter the macro expects is the name of the NT function whose indirect syscall is to be executed.
+/// The rest of the parameters are the arguments to be passed to the specified NT function.
+/// 
+/// The return value of the macro is the `NTSTATUS` value returned by the NT function.
+///
+/// # Parameters
+///
+/// - `nt_function_name: &str`: The name of the NT function to be called.
+/// - `args...`: The arguments to be passed to the NT function.
+///
+/// # Example
+///
+/// ```rust
+/// #[inline(never)] // This attribute is mandatory for any function calling this macro
+/// fn another_function() -> bool
+/// {
+///     unwinder::spoof_and_continue();
+///     ...
+///     let large = 0x8000000000000000 as u64; // Sleep indefinitely
+///     let large: *mut i64 = std::mem::transmute(&large);
+///     let alertable = false;
+///     let ntstatus = unwinder::replace_and_syscall!("NtDelayExecution", false, alertable, large);
+///     println!("ntstatus: {:x}", ntstatus as usize);
+///     ...
+///     unwinder::restore();
+///     
+///     true
+/// } 
+/// 
+/// #[no_mangle]
+/// fn your_program_entry(base_address: usize) -> bool
+/// {
+///     unwinder::start_replacement!(base_address);
+///     let r = another_function();
+///     unwinder::end_replacement!();
+/// 
+///     r
+/// }
+/// ```
 #[cfg(feature = "Experimental")]
 #[macro_export]
 macro_rules! replace_and_syscall {
@@ -240,6 +477,10 @@ macro_rules! replace_and_syscall {
     }}
 }
 
+/// This function is reponsible of retrieving all the information required to create the new
+/// stack when the stack replacemnent process is started.
+/// The returned struct gathers all the required information, including the first three frames sizes, the new stack
+/// total size and the first two return addresses (RtlUserThreadStart+0x21 and BaseThreadInitThunk+0x14). 
 #[cfg(feature = "Experimental")]
 #[inline(never)]
 pub fn get_info_structure(current_size: usize) -> NewStackInfo
@@ -289,6 +530,9 @@ pub fn start_stack_replacement(base_address: usize) -> bool
     }
 }
 
+/// Given a module's base address and the address of one of its functions, it will iterate over the module's unwind data
+/// in order to get the function's frame size in bytes.
+/// In case that the function has not been located, it will return 0.
 #[cfg(feature = "Experimental")]
 #[inline(never)]
 pub fn get_frame_size_from_address_any_module(mut module: usize, address: usize) -> i32
@@ -337,6 +581,9 @@ pub fn get_frame_size_from_address_any_module(mut module: usize, address: usize)
     }
 }
 
+/// Given a function's address, it will iterate over the current module's unwind data
+/// in order to get the function's frame size in bytes.
+/// In case that the function has not been located, it will return 0.
 #[cfg(feature = "Experimental")]
 #[inline(never)]
 pub fn get_frame_size_from_address(address: usize) -> i32
@@ -371,6 +618,12 @@ pub fn get_frame_size_from_address(address: usize) -> i32
     } 
 }
 
+
+/// Given a frame size, this function will look for a function in kernel32.dll/kernelbase.dll/ntdll.dll with the same
+/// frame size. In case it finds it, it will return its memory address; otherwise it returns 0.
+/// 
+/// The black_list argument allows to specify a list of functions that shouldn't be returned when calling this function.
+/// The ignore argument should be set to false in case we want to discard any function that sets a base pointer (UWOP_SET_FPREG unwind code).
 #[cfg(feature = "Experimental")]
 #[inline(never)]
 pub fn get_frame_of_size(desired_size: i32, black_list: Vec<usize>, ignore: bool) -> usize
@@ -474,6 +727,8 @@ pub fn get_frame_of_size(desired_size: i32, black_list: Vec<usize>, ignore: bool
     }
 }
 
+/// Spoofs the previous return address and jumps to the stub that contains the assembly code responsible for
+/// preparing the stack/registers and make the call to the final function. 
 #[cfg(feature = "Experimental")]
 #[inline(never)]
 pub fn replace_and_call(mut args: Vec<*mut c_void>, is_syscall: bool, id: u32) -> *mut c_void
@@ -610,7 +865,6 @@ fn get_pe_baseaddress () -> usize
     }
 }
 
-/////////////////////////////////
 
 /// Call an arbitrary function with a clean call stack.
 /// 
@@ -1155,12 +1409,7 @@ fn get_frame_size_normal(module: usize, runtime_function: RuntimeFunction, ignor
         let mut reader = BitReader::new(&version_and_flags);
     
         // We don't care about the version, we just need the flags to check if there is an Unwind Chain.
-        let flags = reader.read_u8(5).unwrap(); 
-        // CHECK THAT THIS DOESN'T BREAK IT
-       /*  if flags == 0x3 {   
-            return 0;
-        } */
-    
+        let flags = reader.read_u8(5).unwrap();     
         let unwind_codes_count = *(unwind_info.add(2)); 
     
         // We skip 4 bytes corresponding to Version + flags, Size of prolog, Count of unwind codes
@@ -1168,7 +1417,7 @@ fn get_frame_size_normal(module: usize, runtime_function: RuntimeFunction, ignor
         // This way we reach the Unwind codes array.
         let mut unwind_code = (unwind_info.add(4)) as *mut u8;
         let mut unwind_code_operation_code_info = unwind_code.add(1);
-        // This counter stores the size of the stack frame.
+        // This counter stores the size of the stack frame in bytes.
         let mut frame_size = 0;
         let mut index = 0;
         while index < unwind_codes_count
@@ -1222,11 +1471,10 @@ fn get_frame_size_normal(module: usize, runtime_function: RuntimeFunction, ignor
                 3 =>
                 {
                     // UWOP_SET_FPREG // Dynamic alloc "does not change" frame's size 
-                    *base_pointer = true;
+                    *base_pointer = true; // This is not used atm
                     if !ignore_rsp_and_bp {
-                        return 0;
+                        return 0; // This is meant to prevent the use of return addresses corresponding to functions that set a base pointer
                     }
-                    //return 0; // CHECK THAT THIS DOESN'T BREAK IT
     
                 }
                 4 =>
@@ -1322,7 +1570,7 @@ fn get_frame_size_with_setfpreg(module: usize, runtime_function: RuntimeFunction
         // This way we reach the Unwind codes array.
         let mut unwind_code = (unwind_info.add(4)) as *mut u8;
         let mut unwind_code_operation_code_info = unwind_code.add(1);
-        // This counter stores the size of the stack frame.
+        // This counter stores the size of the stack frame in bytes.
         let mut frame_size = 0;
         let mut index = 0;
         while index < unwind_codes_count
@@ -1651,7 +1899,7 @@ fn get_frame_size_with_push_rbp(module: usize, runtime_function: RuntimeFunction
 
 /// Returns a pair containing a pointer to the Exception data of an arbitrary module and the size of the  
 /// corresponding PE section (.pdata). In case that it fails to retrieve this information, it returns
-/// null values.
+/// null values (ptr::null_mut(), 0).
 fn get_runtime_table(image_ptr: *mut c_void) -> (*mut dinvoke_rs::data::RuntimeFunction, u32)
 {
     unsafe
