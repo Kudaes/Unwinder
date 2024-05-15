@@ -93,7 +93,7 @@ lazy_static! {
     pub static ref MAP: Arc<Mutex<HashMap<usize,usize>>> = Arc::new(Mutex::new(HashMap::default()));
 }
 
-/// The `spoof_and_continue` macro is designed to spoof the last return address in the call stack to conceal the presence of anomalous entries. 
+/// The `replace_and_continue` macro is designed to spoof the last return address in the call stack to conceal the presence of anomalous entries. 
 ///
 /// This macro calculates the size of the last frame at runtime and searches for another function with the same size in a legitimately loaded DLL within 
 /// the current process. The legitimate function is used then as replacement return address, allowing to hide the last entry in the call stack.
@@ -110,7 +110,7 @@ lazy_static! {
 /// #[inline(never)] // This attribute is mandatory for any function calling this macro
 /// fn another_function() -> bool
 /// {
-///     unwinder::spoof_and_continue();
+///     unwinder::replace_and_continue();
 ///     ...
 ///     unwinder::restore();
 ///     
@@ -130,7 +130,7 @@ lazy_static! {
 ///
 #[cfg(feature = "Experimental")]
 #[macro_export]
-macro_rules! spoof_and_continue {
+macro_rules! replace_and_continue {
 
     () => {{
         unsafe
@@ -174,13 +174,13 @@ macro_rules! spoof_and_continue {
     }}
 }
 
-/// The `restore` macro is the inverse of the `spoof_and_continue` macro.
+/// The `restore` macro is the inverse of the `replace_and_continue` macro.
 ///
-/// This macro should be called at the end of all functions that have called the `spoof_and_continue` macro.
+/// This macro should be called at the end of all functions that have called the `replace_and_continue` macro.
 /// Its primary objective is to restore the return address to its original value, allowing the program to continue
 /// normal execution.
 ///
-/// Similar to the `spoof_and_continue` macro, any function that calls the `restore` macro must declare the attribute
+/// Similar to the `replace_and_continue` macro, any function that calls the `restore` macro must declare the attribute
 /// `#[inline(never)]`, unless the function is exported using the `#[no_mangle]` attribute, in which case the `#[inline(never)]`
 /// attribute is not required.
 ///
@@ -190,7 +190,7 @@ macro_rules! spoof_and_continue {
 /// #[inline(never)] // This attribute is mandatory for any function calling this macro
 /// fn another_function() -> bool
 /// {
-///     unwinder::spoof_and_continue();
+///     unwinder::replace_and_continue();
 ///     ...
 ///     unwinder::restore();
 ///     
@@ -362,7 +362,7 @@ macro_rules! end_replacement {
 /// #[inline(never)] // This attribute is mandatory for any function calling this macro
 /// fn another_function() -> bool
 /// {
-///     unwinder::spoof_and_continue();
+///     unwinder::replace_and_continue();
 ///     ...
 ///     let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll");
 ///     let sleep = dinvoke_rs::dinvoke::get_function_address(k32, "Sleep"); // Memory address of kernel32.dll!Sleep() 
@@ -430,7 +430,7 @@ macro_rules! replace_and_call {
 /// #[inline(never)] // This attribute is mandatory for any function calling this macro
 /// fn another_function() -> bool
 /// {
-///     unwinder::spoof_and_continue();
+///     unwinder::replace_and_continue();
 ///     ...
 ///     let large = 0x8000000000000000 as u64; // Sleep indefinitely
 ///     let large: *mut i64 = std::mem::transmute(&large);
