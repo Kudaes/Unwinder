@@ -15,10 +15,10 @@
   - [Initial frame](#Initial-frame)
   - [PoC](#PoC)
 - [Stack replacement](#Stack-replacement)
-  - [Description](#Description)
-  - [Usage](#Usage)
-  - [Example](#Example)
-  - [Considerations](#Considerations)
+  - [Description](##Description)
+  - [Usage](##Usage)
+  - [Example](##Example)
+  - [Considerations](##Considerations)
 
 # Description
 
