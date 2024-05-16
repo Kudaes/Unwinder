@@ -15,10 +15,10 @@
   - [Initial frame](#Initial-frame)
   - [PoC](#PoC)
 - [Stack replacement](#Stack-replacement)
-  - [Description](##Description)
-  - [Usage](##Usage)
-  - [Example](##Example)
-  - [Considerations](##Considerations)
+  - [Description](#Technique-description)
+  - [Usage](#How-to-use-it)
+  - [Example](#Example)
+  - [Remarks](#Remarks)
 
 # Description
 
@@ -185,7 +185,7 @@ In order to test the implementation of the technique, [PE-sieve](https://github.
 ![PE-sieve results when unwinder is not used.](/images/not_spoofed.png "PE-sieve results when unwinder is used")
 
 # Stack replacement
-## Description
+## Technique description
 
 This is a call stack spoofing alternative to SilentMoonWalk that allows to keep a clean call stack during the execution of your program. The main idea behind this technique is that each called function inside your module takes care of the previously pushed return address, finding at runtime a legitimate function with the same frame size as that of the return address to be spoofed. Once a legitime function with the same frame size has been located, a random offset within is is calculated and the final address is used to **replace** the last return address, hiding any anomalous entry in the call stack and keeping it unwindable. The original return address is stored by `unwinder` and it is moved back to the right position in the stack before a return instruction is executed, allowing to continue the normal flow of the program.
 
@@ -195,7 +195,7 @@ This is a call stack spoofing alternative to SilentMoonWalk that allows to keep 
 
 This is an experimental feature that despite being fully functional it is still under development and research, so make sure to test your code if you decide to integrate this technique on it. 
 
-## Usage
+## How to use it
 
 To use the stack replacement functionality you should add the following line to your `cargo.toml` and compile on `release` mode:
 
@@ -341,7 +341,7 @@ fn internal_b(value: bool) -> bool
 } 
 ```
 
-## Considerations
+## Remarks
 
 Since this is an under development feature, some stuff must be taken into account:
 * If you are removing your PE's headers during the loading process, you must pass to the `start_stack_replace` macro the module's base address. Right now, it won't be able to find it by itself (to be solved in the next update).
