@@ -14,6 +14,11 @@
 - [Considerations](#Considerations)
   - [Initial frame](#Initial-frame)
   - [PoC](#PoC)
+- [Stack replacement](#Stack-replacement)
+  - [Description](#Description)
+  - [Usage](#Usage)
+  - [Example](#Example)
+  - [Considerations](#Considerations)
 
 # Description
 
@@ -27,6 +32,8 @@ This crate comes with the following characteristics:
 * TLS is used to increase efficiency during the spoofing process.
 * [dinvoke_rs](https://crates.io/crates/dinvoke_rs) is used to make any Windows API call required by the crate.
 
+Additionally, an experimental call stack spoofing method has been implemented as well under the name of **stack replacement**. The concept behind this technique and the usage of the different macros included are described later on this document.
+
 # Credits
 kudos to the creators of the SilentMoonWalk technique:
 
@@ -38,7 +45,7 @@ And of course a huge shoutout to [namazso](https://twitter.com/namazso) for the 
 
 # Usage
 
-Import this crate into your project by adding the following line to your `cargo.toml`:
+Import this crate into your project by adding the following line to your `cargo.toml` and compile on `release` mode:
 
 ```rust
 [dependencies]
@@ -51,7 +58,7 @@ The main functionality of this crate has been wrapped in two macros:
 
 To use any of these macros it is required to import `std::ffi::c_void` data type.
 
-Both macros return a `PVOID` that can be used to retrieve the value returned by the function executed. More detailed information in the examples section.
+Both macros return a `*mut c_void` that can be used to retrieve the value returned by the function executed. More detailed information in the examples section.
 
 ## call_function macro
 
@@ -176,3 +183,170 @@ In order to test the implementation of the technique, [PE-sieve](https://github.
 
 ![PE-sieve results when unwinder is used.](/images/spoofed.png "PE-sieve results when unwinder is used")
 ![PE-sieve results when unwinder is not used.](/images/not_spoofed.png "PE-sieve results when unwinder is used")
+
+# Stack replacement
+## Description
+
+This is a call stack spoofing alternative to SilentMoonWalk that allows to keep a clean call stack during the execution of your program. The main idea behind this technique is that each called function inside your module takes care of the previously pushed return address, finding at runtime a legitimate function with the same frame size as that of the return address to be spoofed. Once a legitime function with the same frame size has been located, a random offset within is is calculated and the final address is used to **replace** the last return address, hiding any anomalous entry in the call stack and keeping it unwindable. The original return address is stored by `unwinder` and it is moved back to the right position in the stack before a return instruction is executed, allowing to continue the normal flow of the program.
+
+<p align="center">
+<img src="/images/stack_replacement.png" alt="Stack replacement" width="700" >
+</p>
+
+This is an experimental feature that despite being fully functional it is still under development and research, so make sure to test your code if you decide to integrate this technique on it. 
+
+## Usage
+
+To use the stack replacement functionality you should add the following line to your `cargo.toml` and compile on `release` mode:
+
+```rust
+[dependencies]
+unwinder = {version = "0.1.2", features = ["Experimental"]}
+```
+
+The main functionality of this feature has been wrapped in the following macros:
+* The `start_stack_replacement!()`/`end_replacement!()` pair of macros indicates `unwinder` to start/end the stack replacement process. These two macros must be called in your code's entry point (e.g. in your dll's exported functions).
+* The `replace_and_continue!()`/`restore!()` pair of macros performs the replacement/restoration of the last return address.
+* Finally, the `replace_and_call!()`/`replace_and_syscall!()` pair of macros are used to perform stack replacement when we want to call functions outside of the current module (e.g. when using Windows API or calling any other dll's code).
+
+To use these macros it is required to import `std::ffi::c_void` data type.
+All the functions using any of these macros should be labeled with the `#[no_mangle]` or `#[inline(never)]` attributes to prevent the rust compiler from inlining them during the optimization process.
+
+Before diving into a practical example showing how to use all of this stuff, just a quick inspection of the `replace_and_call`/`replace_and_syscall` pair of macros and how to pass them the expected arguments.
+
+## replace_and_call
+
+This macro is used to call any desired function outside of the current module with a clean call stack while using stack replacement.
+The macro expects the following parameters:
+* The first parameter is the memory address of the function to call. This parameter should be passed as a `usize`, `isize` or a pointer.
+* The following parameters are those arguments to send to the specified function. They follow the same rules specified in the **Parameter passing** section.
+
+## replace_and_syscall
+
+This macro is used to perform any desired indirect syscall with a clean call stack while using stack replacement.
+The macro expects the following parameters:
+* The first parameter is a string that contains the name of the NT function whose syscall you want to execute.
+* The following parameters are those arguments to send to the NT function. They follow the same rules specified in the **Parameter passing** section.
+
+
+## Example
+
+I think the best way to show how these macros are used is through a practical example. Let's suppose we are creating a dll that will be **reflectively injected** to memory. This dll will export two functions `ExportA` and `ExportB`, so we will consider these two functions as the module's entry points. Both of them must call `start_stack_replacement` macro right at the beginning and also they must call the reverse `end_replacement` macro before returning. The `start_stack_replacement` macro **expects as argument the module's base address**, or you can pass 0 if you dont know that address at runtime, the macro will try to figure it out by itself.
+
+```rust
+#[no_mangle]
+fn ExportedA(base_address: usize) -> bool
+{
+    unwinder::start_replacement!(base_address);
+    ...
+    unwinder::end_replacement!();
+
+    true
+}
+
+#[no_mangle]
+fn ExportedB() -> bool
+{
+    unwinder::start_replacement!(0);
+    ...
+    unwinder::end_replacement!();
+
+    true
+}
+```
+Starting the stack replacement process involves the manual crafting of a new stack that will be used until the `end_replacement` macro is called. The following picture illustrates what is going on under the hood:
+
+<p align="center">
+<img src="/images/start_stack_replacement.png" alt="Stack replacement" width="700" >
+</p>
+
+Although theoretically it would not be necessary to start a new stack from scratch, I've decided to implement the process this way to ensure stability and to prevent anything from breaking. Now, let's assume that our `ExportedA` function makes calls to another two internal functions. These two internal functions are responsible for replacing the pushed return address, that will point to some place within `ExportedA` breaking the call stack unless we take care of it. This replacement process involves wrapping our internal function's code between the `replace_and_continue` and `restore` macros:
+
+```rust
+#[no_mangle]
+fn ExportedA(base_address: usize) -> bool
+{
+    unwinder::start_replacement!(base_address);
+    let ret_a = internal_a();
+    let ret_b = internal_b(ret_a);
+    unwinder::end_replacement!();
+
+    ret_b
+}
+
+#[inline(never)] // This attribute is mandatory
+fn internal_a() -> bool
+{
+    unwinder::replace_and_continue();
+    ...
+    unwinder::restore();
+    
+    some_value
+} 
+
+#[inline(never)] // This attribute is mandatory
+fn internal_b(value: bool) -> bool
+{
+    unwinder::replace_and_continue();
+    ...
+    unwinder::restore();
+    
+    some_value
+} 
+```
+
+Finally, both `internal_a` and `internal_b` functions make use of some Windows API functionality. To keep the unwindable call stack, these calls should be performed through the `replace_and_call` (normal call) or `replace_and_syscall` (indirect syscall) macros.
+
+```rust
+#[no_mangle] // This attribute is mandatory
+fn ExportedA(base_address: usize) -> bool
+{
+    unwinder::start_replacement!(base_address);
+    let ret_a = internal_a();
+    let ret_b = internal_b(ret_a);
+    unwinder::end_replacement!();
+
+    ret_b
+}
+
+#[inline(never)] // This attribute is mandatory
+fn internal_a() -> bool
+{
+    unwinder::replace_and_continue();
+    ...
+    let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll");
+    let sleep = dinvoke_rs::dinvoke::get_function_address(k32, "Sleep"); // Memory address of kernel32.dll!Sleep() 
+    let miliseconds = 1000i32;
+    unwinder::replace_and_call!(sleep, false, miliseconds);
+    ...
+    unwinder::restore();
+    
+    some_value
+} 
+
+#[inline(never)] // This attribute is mandatory
+fn internal_b(value: bool) -> bool
+{
+    unwinder::replace_and_continue();
+    ...
+    let large = 0x8000000000000000 as u64; // Sleep indefinitely
+    let large: *mut i64 = std::mem::transmute(&large);
+    let alertable = false;
+    let ntstatus = unwinder::replace_and_syscall!("NtDelayExecution", alertable, large);
+    println!("ntstatus: {:x}", ntstatus as usize);
+    ...
+    unwinder::restore();
+    
+    some_value
+} 
+```
+
+## Considerations
+
+Since this is an under development feature, some stuff must be taken into account:
+* If you are removing your PE's headers during the loading process, you must pass to the `start_stack_replace` macro the module's base address. Right now, it won't be able to find it by itself (to be solved in the next update).
+* In case you are wondering, stack replacement uses the same combination of `jmp rbx` + concealment frame as the SilentMoonWalk technique. This happens only when using `replace_and_call` and `replace_and_syscall` macros and it is planned to be changed in the next update.
+* Both `replace_and_call` and `replace_and_syscall` macros return a `*mut c_void` that can be used to retrieve the value returned by the function executed through them. This is the same behaviour as the one described for the `call_function` and `indirect_syscall` macros.
+* `replace_and_call` and `replace_and_syscall` macros allows up to 11 arguments.
+
+Please report me any bug that may arise when using this feature.

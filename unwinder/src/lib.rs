@@ -100,7 +100,7 @@ lazy_static! {
 ///
 /// The real replaced return addresses are stored in an internal structure so they can be restored later when the `restore` macro is called.
 ///
-/// To use this macro, the `start_replacement` macro must have been called previously in another function to initialize the necessary structures. Any
+/// To use this macro, the `start_replacement` macro must have been called previously to initialize the necessary structures. Any
 /// function calling this macro should declare the `#[inline(never)]` attribute (exported functions through the `#[no_mangle]` attribute doest not need to 
 /// additionally declare the inline attribute).
 ///
@@ -342,7 +342,7 @@ macro_rules! end_replacement {
 ///
 /// This macro acts as a gateway, spoofing the last entry in the call stack before jumping to the memory address of the specified function.
 /// 
-/// To use this macro, the `start_replacement` macro must have been called previously in another function to initialize the necessary structures. Any
+/// To use this macro, the `start_replacement` macro must have been called previously to initialize the necessary structures. Any
 /// function calling this macro should declare the `#[inline(never)]` attribute (exported functions using the `#[no_mangle]` attribute doest not need to 
 /// additionally declare the inline attribute).
 /// 
@@ -435,7 +435,7 @@ macro_rules! replace_and_call {
 ///     let large = 0x8000000000000000 as u64; // Sleep indefinitely
 ///     let large: *mut i64 = std::mem::transmute(&large);
 ///     let alertable = false;
-///     let ntstatus = unwinder::replace_and_syscall!("NtDelayExecution", false, alertable, large);
+///     let ntstatus = unwinder::replace_and_syscall!("NtDelayExecution", alertable, large);
 ///     println!("ntstatus: {:x}", ntstatus as usize);
 ///     ...
 ///     unwinder::restore();
