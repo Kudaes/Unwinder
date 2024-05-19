@@ -320,7 +320,7 @@ fn internal_a() -> bool
     let module_name = CString::new(module_name.to_string()).expect("");
     let module_name_ptr: *mut u8 = std::mem::transmute(module_name.as_ptr());
     let k32 = dinvoke::get_module_base_address("kernel32.dll");
-    let load_library = dinvoke::get_function_address(k32, "LoadLibraryA");
+    let load_library = dinvoke_rs::dinvoke::get_function_address(k32, "LoadLibraryA");
     let ret = unwinder::replace_and_call!(load_library, module_name_ptr); // Load a dll with an unwindable call stack
     println!("advapi.dll base address: 0x{:x}", ret as usize);
     ...
