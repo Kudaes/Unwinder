@@ -304,7 +304,7 @@ macro_rules! start_replacement {
 /// Calling this macro ends the stack replacement process, ensuring that all necessary
 /// structures and states are properly restored.
 ///
-/// This macro should be called at the end of the same function that made the call to the
+/// This macro should be called at the end of any function that made the call to the
 /// `start_replacement` macro.
 ///  
 /// # Example

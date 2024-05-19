@@ -143,7 +143,7 @@ spoof_call2 proc
 	push	rax
 
 	lea		rbx, [rsp]
-	add		rsp, 8
+	add		rsp, 8 ; (mis)alignment
 
 	sub		rsp, [rcx].SPOOFER.JmpRbxGadgetFrameSize
 	push	[rcx].SPOOFER.JmpRbxGadget
