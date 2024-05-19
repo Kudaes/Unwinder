@@ -219,14 +219,14 @@ Before diving into a practical example showing how to use all of this stuff, jus
 This macro is used to call any desired function outside of the current module with a clean call stack while using stack replacement.
 The macro expects the following parameters:
 * The first parameter is the memory address of the function to call. This parameter should be passed as a `usize`, `isize` or a pointer.
-* The following parameters are those arguments to send to the specified function. They follow the same rules specified in the **Parameter passing** section.
+* The following parameters are those arguments to send to the specified function. They follow the same rules specified in the [Parameter passing](#Parameter-passing) section.
 
 ## replace_and_syscall
 
 This macro is used to perform any desired indirect syscall with a clean call stack while using stack replacement.
 The macro expects the following parameters:
 * The first parameter is a string that contains the name of the NT function whose syscall you want to execute.
-* The following parameters are those arguments to send to the NT function. They follow the same rules specified in the **Parameter passing** section.
+* The following parameters are those arguments to send to the NT function. They follow the same rules specified in the [Parameter passing](#Parameter-passing) section.
 
 
 ## Example
