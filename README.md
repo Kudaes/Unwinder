@@ -187,7 +187,7 @@ In order to test the implementation of the technique, [PE-sieve](https://github.
 # Stack replacement
 ## Technique description
 
-This is a call stack spoofing alternative to SilentMoonWalk that allows to keep a clean call stack during the execution of your program. The main idea behind this technique is that each called function inside your module takes care of the previously pushed return address, finding at runtime a legitimate function with the same frame size as that of the return address to be spoofed. Once a legitime function with the same frame size has been located, an offset within is is calculated and the final address is used to **replace** the last return address, hiding any anomalous entry in the call stack and keeping it unwindable. The original return address is stored by `unwinder` and it is moved back to the right position in the stack before a return instruction is executed, allowing to continue the normal flow of the program.
+This is a call stack spoofing alternative to SilentMoonWalk that allows to keep a clean call stack during the execution of your program. The main idea behind this technique is that each called function inside your module takes care of the previously pushed return address, finding at runtime a legitimate function with the same frame size as that of the return address to be spoofed. Once a legitime function with the same frame size has been located, an offset within it is calculated and the final address is used to **replace** the last return address, hiding any anomalous entry in the call stack and keeping it unwindable. The original return address is stored by `unwinder` and it is moved back to the right position in the stack before a return instruction is executed, allowing to continue the normal flow of the program.
 
 <p align="center">
 <img src="/images/stack_replacement.png" alt="Stack replacement" width="700" >
@@ -319,7 +319,7 @@ fn internal_a() -> bool
     let module_name = "advapi32.dll";
     let module_name = CString::new(module_name.to_string()).expect("");
     let module_name_ptr: *mut u8 = std::mem::transmute(module_name.as_ptr());
-    let k32 = dinvoke::get_module_base_address("kernel32.dll");
+    let k32 = dinvoke_rs::dinvoke::get_module_base_address("kernel32.dll");
     let load_library = dinvoke_rs::dinvoke::get_function_address(k32, "LoadLibraryA");
     let ret = unwinder::replace_and_call!(load_library, module_name_ptr); // Load a dll with an unwindable call stack
     println!("advapi.dll base address: 0x{:x}", ret as usize);
