@@ -1,7 +1,7 @@
 # Content
 
 - [SilentMoonWalk](#SilentMoonWalk)
-  - [Description](#Decription)
+  - [Description](#Description)
   - [Credits](#Credits)
   - [Usage](#usage)
       - [call_function!() macro](#call_function-macro)
@@ -18,23 +18,21 @@
 - [Stack replacement](#Stack-replacement)
   - [Description](#Technique-description)
   - [Usage](#How-to-use-it)
-  - [Example](#Example)
+  - [Practical example](#Example)
   - [Remarks](#Remarks)
 
 # SilentMoonWalk
 ## Description
 
-Unwinder is a full weaponization of [SilentMoonWalk](https://github.com/klezVirus/SilentMoonwalk) technique, allowing to obtain complete and stable call stack spoofing in Rust.
+Unwinder provides a full weaponization of [SilentMoonWalk](https://github.com/klezVirus/SilentMoonwalk) technique, allowing to obtain complete and stable call stack spoofing in Rust.
 
-This crate comes with the following characteristics:
+This technique comes with the following characteristics:
 * Support to run any arbitrary function with up to 11 parameters.
 * Support to run indirect syscalls (no additional heap allocations) with up to 11 parameters.
 * The crate allows to retrieve the value returned by the functions called through it.
 * The spoofing process can be concatenated any number of times without increasing the call stack size.
 * TLS is used to increase efficiency during the spoofing process.
 * [dinvoke_rs](https://crates.io/crates/dinvoke_rs) is used to make any Windows API call required by the crate.
-
-Additionally, an experimental call stack spoofing method has been implemented as well under the name of **stack replacement**. The concept behind this technique and the usage of the different macros included are described later on this document.
 
 ## Credits
 kudos to the creators of the SilentMoonWalk technique:
@@ -189,7 +187,7 @@ In order to test the implementation of the technique, [PE-sieve](https://github.
 # Stack replacement
 ## Technique description
 
-This is a call stack spoofing alternative to SilentMoonWalk that allows to keep a clean call stack during the execution of your program. The main idea behind this technique is that each called function inside your module takes care of the previously pushed return address, finding at runtime a legitimate function with the same frame size as that of the return address to be spoofed. Once a legitime function with the same frame size has been located, a random offset within is is calculated and the final address is used to **replace** the last return address, hiding any anomalous entry in the call stack and keeping it unwindable. The original return address is stored by `unwinder` and it is moved back to the right position in the stack before a return instruction is executed, allowing to continue the normal flow of the program.
+This is a call stack spoofing alternative to SilentMoonWalk that allows to keep a clean call stack during the execution of your program. The main idea behind this technique is that each called function inside your module takes care of the previously pushed return address, finding at runtime a legitimate function with the same frame size as that of the return address to be spoofed. Once a legitime function with the same frame size has been located, an offset within is is calculated and the final address is used to **replace** the last return address, hiding any anomalous entry in the call stack and keeping it unwindable. The original return address is stored by `unwinder` and it is moved back to the right position in the stack before a return instruction is executed, allowing to continue the normal flow of the program.
 
 <p align="center">
 <img src="/images/stack_replacement.png" alt="Stack replacement" width="700" >
@@ -262,7 +260,9 @@ Starting the stack replacement process involves the manual crafting of a new sta
 <img src="/images/start_stack_replacement.png" alt="Stack replacement" width="700" >
 </p>
 
-Although theoretically it would not be necessary to start a new stack from scratch, I've decided to implement the process this way to ensure stability and to prevent anything from breaking. Now, let's assume that our `ExportedA` function makes calls to another two internal functions. These two internal functions are responsible for replacing the original return address that will point to some place within `ExportedA` breaking the call stack unless we take care of it. This replacement process involves wrapping our internal function's code between the `replace_and_continue` and `restore` macros:
+Although theoretically it would not be necessary to start a new stack from scratch, I've decided to implement the process this way to ensure stability and to prevent anything from breaking. 
+
+Now, let's assume that our `ExportedA` function makes several calls to another two internal functions. These two internal functions are responsible for replacing/restoring the original return address that will point to some place within `ExportedA`, breaking the call stack unless we take care of it. This replacement process involves wrapping our internal function's code between the `replace_and_continue` and `restore` macros:
 
 ```rust
 #[no_mangle]
@@ -317,12 +317,12 @@ fn internal_a() -> bool
     unwinder::replace_and_continue();
     ...
     let module_name = "advapi32.dll";
-	let module_name = CString::new(module_name.to_string()).expect("");
-	let module_name_ptr: *mut u8 = std::mem::transmute(module_name.as_ptr());
-	let k32 = dinvoke::get_module_base_address("kernel32.dll");
-	let load_library = dinvoke::get_function_address(k32, "LoadLibraryA");
-	let ret = unwinder::replace_and_call!(load_library, module_name_ptr); // Load a dll with an unwindable call stack
-	println!("advapi.dll base address: 0x{:x}", ret as usize);
+    let module_name = CString::new(module_name.to_string()).expect("");
+    let module_name_ptr: *mut u8 = std::mem::transmute(module_name.as_ptr());
+    let k32 = dinvoke::get_module_base_address("kernel32.dll");
+    let load_library = dinvoke::get_function_address(k32, "LoadLibraryA");
+    let ret = unwinder::replace_and_call!(load_library, module_name_ptr); // Load a dll with an unwindable call stack
+    println!("advapi.dll base address: 0x{:x}", ret as usize);
     ...
     unwinder::restore();
     
