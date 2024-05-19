@@ -104,7 +104,7 @@ let open_process: isize = dinvoke_rs::dinvoke::get_function_address(k32, "Openpr
 let desired_access: u32 = 0x1000;
 let inherit = 0i32;
 let pid = 20628i32;
-let handle: *mut c_void = unwinder::call_function!(open_process, desired_access, inherit, pid);
+let handle: *mut c_void = unwinder::call_function!(open_process, false, desired_access, inherit, pid);
 let handle: HANDLE = std::mem::transmute(handle);
 println!("Handle id: {:x}", handle.0);
 ```
