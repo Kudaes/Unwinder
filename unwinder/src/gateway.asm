@@ -67,11 +67,11 @@ start_replacement proc
 	mov 	rax, [rsp]
 	mov		r11, rsp
 
-	add		r11, 8 ; we discard current return address to get the original rsp address
+	add		r11, 8 ; we discard current return address to get the original rsp value
 	push 	rsp
 	push 	rbp
-	push	0
-	push	0
+	push	r12 ; save nonvolatile registers
+	push	r15
 
 	sub 	rsp, [rcx].INFO_STRUCT.RtlSize
 	push	[rcx].INFO_STRUCT.RtlAddr
@@ -104,22 +104,24 @@ end_loop_1:
 start_replacement endp
 
 end_replacement proc
-	pop		r14
+	pop		r14 
 	mov		r11, rsp ; original rsp
-	mov		r12, [rcx].INFO_STRUCT.TotalSize
-	add 	rsp, r12
+	mov		r8, [rcx].INFO_STRUCT.TotalSize
+	add 	rsp, r8
+	pop		r15 ; restore nonvolatile registers
+	pop		r12
 	pop 	rbp
 	pop		rsp
-	pop		r13
+	pop		r9  ; old return address
 
 	mov		r9, 0 ; offset 
 start_loop_2:
 	mov		r8, r11 ; original rsp
-	mov		r12, rsp ; current rsp
+	mov		rdx, rsp ; current rsp
 	add		r8, r9
-	add		r12, r9
+	add		rdx, r9
 	mov		r10, [r8]
-	mov		[r12], r10
+	mov		[rdx], r10
 	add		r9, 8
 	cmp		r9, [rcx].INFO_STRUCT.CurrentSize
 	je		end_loop_2

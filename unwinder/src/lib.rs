@@ -504,7 +504,7 @@ pub fn get_info_structure(current_size: usize) -> NewStackInfo
         stack_info.baseaddr = base_thread_init_thunk_address;
         stack_info.basesize = size_base as usize;
         stack_info.current_size = current_size;
-        stack_info.total_size = size_rtl as usize + size_base  as usize + current_size + 32 ; // 16 (two return addresses) * 2 (alignment?)
+        stack_info.total_size = size_rtl as usize + size_base  as usize + current_size + 16 ; // 16 (two return addresses) 
           
         stack_info
     }
