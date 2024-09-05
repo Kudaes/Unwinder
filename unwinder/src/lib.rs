@@ -436,7 +436,7 @@ macro_rules! replace_and_call {
 ///     let large: *mut i64 = std::mem::transmute(&large);
 ///     let alertable = false;
 ///     let ntstatus = unwinder::replace_and_syscall!("NtDelayExecution", alertable, large);
-///     println!("ntstatus: {:x}", ntstatus as usize);
+///     println!("ntstatus: {:x}", ntstatus as i32);
 ///     ...
 ///     unwinder::restore();
 ///     
@@ -462,16 +462,22 @@ macro_rules! replace_and_syscall {
         unsafe
         {
             let mut temp_vec = Vec::new();
+            let r = -1isize;
+            let mut res: *mut c_void = std::mem::transmute(r);
             let t = $crate::prepare_syscall($a);
-            let p: *mut c_void = std::mem::transmute(t.1);
-            temp_vec.push(p);
-            $(
-                let temp = $x as usize; // This is meant to convert integers with smaller size than 8 bytes
-                let pointer: *mut c_void = std::mem::transmute(temp);
-                temp_vec.push(pointer);
-            )*
-            
-            let res = $crate::replace_and_call(temp_vec, true, t.0);
+            if t.0 != u32::MAX 
+            {
+                let p: *mut c_void = std::mem::transmute(t.1);
+                temp_vec.push(p);
+                $(
+                    let temp = $x as usize; // This is meant to convert integers with smaller size than 8 bytes
+                    let pointer: *mut c_void = std::mem::transmute(temp);
+                    temp_vec.push(pointer);
+                )*
+                
+                res = $crate::replace_and_call(temp_vec, true, t.0);
+            }
+
             res
         }
     }}
@@ -898,7 +904,7 @@ macro_rules! call_function {
             let mut temp_vec = Vec::new();
             $(
                 let temp = $x as usize; // This is meant to convert integers with smaller size than 8 bytes
-                let pointer: *mut c_void = std::mem::transmute(temp);
+                let pointer: *mut std::ffi::c_void = std::mem::transmute(temp);
                 temp_vec.push(pointer);
             )*
                 
@@ -928,30 +934,36 @@ macro_rules! call_function {
 /// let large: *mut i64 = std::mem::transmute(&large);
 /// let alertable = false;
 /// let ntstatus = unwinder::indirect_syscall!("NtDelayExecution", false, alertable, large);
-/// println!("ntstatus: {:x}", ntstatus as usize);
+/// println!("ntstatus: {:x}", ntstatus as i32);
 /// ```
 /// 
 #[macro_export]
 macro_rules! indirect_syscall {
 
-    ($a:expr, $($x:expr),*) => {{
+    ($a:expr, $($x:expr),*) => {
 
         unsafe
         {
             let mut temp_vec = Vec::new();
             let t = $crate::prepare_syscall($a);
-            let p: *mut c_void = std::mem::transmute(t.1);
-            temp_vec.push(p);
-            $(
-                let temp = $x as usize; // This is meant to convert integers with smaller size than 8 bytes
-                let pointer: *mut c_void = std::mem::transmute(temp);
-                temp_vec.push(pointer);
-            )*
-            
-            let res = $crate::spoof_and_call(temp_vec, true, t.0);
+            let r = -1isize;
+            let mut res: *mut std::ffi::c_void = std::mem::transmute(r);
+            if t.0 != u32::MAX 
+            {
+                let p: *mut std::ffi::c_void = std::mem::transmute(t.1);
+                temp_vec.push(p);
+                $(
+                    let temp = $x as usize; // This is meant to convert integers with smaller size than 8 bytes
+                    let pointer: *mut std::ffi::c_void = std::mem::transmute(temp);
+                    temp_vec.push(pointer);
+                )*
+                
+                res = $crate::spoof_and_call(temp_vec, true, t.0);
+            }
+
             res
         }
-    }}
+    }
 }
 
 /// Don't call this function directly, use call_function!() and indirect_syscall!() macros instead.
@@ -959,7 +971,7 @@ pub fn spoof_and_call(mut args: Vec<*mut c_void>, is_syscall: bool, id: u32) -> 
 {
     unsafe
     {
-        if is_syscall && (id == u32::MAX) {
+        if is_syscall && (id == u32::MAX) { 
             return ptr::null_mut();
         }
     
@@ -1023,12 +1035,12 @@ pub fn spoof_and_call(mut args: Vec<*mut c_void>, is_syscall: bool, id: u32) -> 
     
             args_number -= 1;
         }
-    
+
         let mut spoofy = get_cookie_value();
         if spoofy == 0
         {
             let current_rsp = get_current_rsp();
-            spoofy = get_desirable_return_address(current_rsp, keep_start_function_frame);           
+            spoofy = get_desirable_return_address(current_rsp, keep_start_function_frame);    
         }
     
         config.return_address = spoofy as *mut _; 
@@ -1038,7 +1050,7 @@ pub fn spoof_and_call(mut args: Vec<*mut c_void>, is_syscall: bool, id: u32) -> 
 }
 
 
-// This functions will returns the main module's frame address in the stack.
+// This function returns the main module's frame address in the stack.
 // If it fails to do so, it will return the BaseThreadInitThunk's frame address instead.
 fn get_desirable_return_address(current_rsp: usize, keep_start_function_frame: bool )-> usize
 {
@@ -1050,6 +1062,7 @@ fn get_desirable_return_address(current_rsp: usize, keep_start_function_frame: b
         let mut end_address = 0;
         let base_thread_init_thunk_start = dinvoke_rs::dinvoke::get_function_address(k32, &lc!("BaseThreadInitThunk")) as usize;
         let base_thread_init_thunk_addresses = get_function_size(k32 as usize, base_thread_init_thunk_start);
+        
         let base_thread_init_thunk_end = base_thread_init_thunk_addresses.1;
         let thread_handle = GetCurrentThread();
         let thread_info_class = 9u32;
@@ -1062,7 +1075,6 @@ fn get_desirable_return_address(current_rsp: usize, keep_start_function_frame: b
         {
             // Obtain current thread's start address
             let ret = dinvoke_rs::dinvoke::nt_query_information_thread(thread_handle, thread_info_class, thread_information, thread_info_len, ret_len);
-
             if ret == 0 
             {
                 let thread_information = thread_information as *mut usize; 
@@ -1085,7 +1097,6 @@ fn get_desirable_return_address(current_rsp: usize, keep_start_function_frame: b
             }  
         }
         
-
         let mut stack_iterator: *mut usize = current_rsp as *mut usize;
         let mut found = false;
 
@@ -1124,18 +1135,16 @@ fn get_cookie_value() -> usize
     
             TLS_INDEX = r;
         }
-    
+
         let value = dinvoke_rs::dinvoke::tls_get_value(TLS_INDEX) as *mut usize;
         if value as usize == 0
         {   
-            if  dinvoke_rs::dinvoke::get_last_error() != 0 
-            {
-                let heap_region = dinvoke_rs::dinvoke::local_alloc(0x0040, 8); // 0x0040 = LPTR
-                if heap_region != ptr::null_mut() {
-                    let _ = dinvoke_rs::dinvoke::tls_set_value(TLS_INDEX, heap_region);
-                }
+            let heap_region = dinvoke_rs::dinvoke::local_alloc(0x0040, 8); // 0x0040 = LPTR
+
+            if heap_region != ptr::null_mut() {
+                let _ = dinvoke_rs::dinvoke::tls_set_value(TLS_INDEX, heap_region);
             }
-    
+
             return 0;
         }
     
@@ -1904,8 +1913,8 @@ fn get_runtime_table(image_ptr: *mut c_void) -> (*mut dinvoke_rs::data::RuntimeF
 {
     unsafe
     {
-        let module_metadata = dinvoke_rs::manualmap::get_pe_metadata(image_ptr as *const u8);
-        if !module_metadata.is_ok() {
+        let module_metadata = dinvoke_rs::manualmap::get_pe_metadata(image_ptr as *const u8, false);
+        if module_metadata.is_err() {
             return (ptr::null_mut(), 0);
         }
     

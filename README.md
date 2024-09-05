@@ -49,7 +49,7 @@ Import this crate into your project by adding the following line to your `cargo.
 
 ```rust
 [dependencies]
-unwinder = "0.1.2"
+unwinder = "0.1.3"
 ```
 
 The main functionality of this crate has been wrapped in two macros:
@@ -118,7 +118,7 @@ let large = 0x8000000000000000 as u64; // Sleep indefinitely
 let large: *mut i64 = std::mem::transmute(&large);
 let alertable = false;
 let ntstatus: *mut c_void = unwinder::indirect_syscall!("NtDelayExecution", false, alertable, large);
-println!("ntstatus: {:x}", ntstatus as usize);
+println!("ntstatus: {:x}", ntstatus as i32);
 ```
 Notice that the macro returns a `*mut c_void` that can be used to retrieve the `NTSTATUS` returned by `NtDelayExecution`.
 

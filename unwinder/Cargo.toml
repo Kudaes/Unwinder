@@ -14,7 +14,7 @@ strip = true
 Experimental = ["lazy_static"]
 
 [dependencies]
-dinvoke_rs = "0.1.5"
+dinvoke_rs = "0.1.6"
 bitreader = "0.3.8"
 nanorand = "0.7.0"
 winapi = "0.3.9"
