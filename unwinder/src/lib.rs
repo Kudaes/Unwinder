@@ -288,7 +288,7 @@ macro_rules! start_replacement {
             let current_function_size = $crate::get_frame_size_from_address(address);
             
             let structure = $crate::get_info_structure(current_function_size as usize);
-            let structure: *mut c_void = std::mem::transmute(&structure);
+            let structure: *mut std::ffi::c_void = std::mem::transmute(&structure);
             //  The start_replacement stub creates the new stack and moves the current frame's contents to their new locations.
             $crate::start_replacement(structure);
         }
@@ -332,7 +332,7 @@ macro_rules! end_replacement {
             let current_function_size = $crate::get_frame_size_from_address(address);
     
             let structure = $crate::get_info_structure(current_function_size as usize);
-            let structure: *mut c_void = std::mem::transmute(&structure);
+            let structure: *mut std::ffi::c_void = std::mem::transmute(&structure);
             $crate::end_replacement(structure);
         }
     }
@@ -395,7 +395,7 @@ macro_rules! replace_and_call {
             let mut temp_vec = Vec::new();
             $(
                 let temp = $x as usize; // This is meant to convert integers with smaller size than 8 bytes
-                let pointer: *mut c_void = std::mem::transmute(temp);
+                let pointer: *mut std::ffi::c_void = std::mem::transmute(temp);
                 temp_vec.push(pointer);
             )*
 
@@ -463,15 +463,15 @@ macro_rules! replace_and_syscall {
         {
             let mut temp_vec = Vec::new();
             let r = -1isize;
-            let mut res: *mut c_void = std::mem::transmute(r);
+            let mut res: *mut std::ffi::c_void = std::mem::transmute(r);
             let t = $crate::prepare_syscall($a);
             if t.0 != u32::MAX 
             {
-                let p: *mut c_void = std::mem::transmute(t.1);
+                let p: *mut std::ffi::c_void = std::mem::transmute(t.1);
                 temp_vec.push(p);
                 $(
                     let temp = $x as usize; // This is meant to convert integers with smaller size than 8 bytes
-                    let pointer: *mut c_void = std::mem::transmute(temp);
+                    let pointer: *mut std::ffi::c_void = std::mem::transmute(temp);
                     temp_vec.push(pointer);
                 )*
                 

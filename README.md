@@ -104,7 +104,7 @@ let open_process: isize = dinvoke_rs::dinvoke::get_function_address(k32, "Openpr
 let desired_access: u32 = 0x1000;
 let inherit = 0i32;
 let pid = 20628i32;
-let handle: *mut c_void = unwinder::call_function!(open_process, false, desired_access, inherit, pid);
+let handle = unwinder::call_function!(open_process, false, desired_access, inherit, pid); // returns *mut c_void
 let handle: HANDLE = std::mem::transmute(handle);
 println!("Handle id: {:x}", handle.0);
 ```
@@ -117,7 +117,7 @@ Notice that the macro returns a `*mut c_void` that can be directly converted to 
 let large = 0x8000000000000000 as u64; // Sleep indefinitely
 let large: *mut i64 = std::mem::transmute(&large);
 let alertable = false;
-let ntstatus: *mut c_void = unwinder::indirect_syscall!("NtDelayExecution", false, alertable, large);
+let ntstatus = unwinder::indirect_syscall!("NtDelayExecution", false, alertable, large); // returns *mut c_void
 println!("ntstatus: {:x}", ntstatus as i32);
 ```
 Notice that the macro returns a `*mut c_void` that can be used to retrieve the `NTSTATUS` returned by `NtDelayExecution`.
@@ -201,7 +201,7 @@ To use the stack replacement functionality you should add the following line to 
 
 ```rust
 [dependencies]
-unwinder = {version = "0.1.2", features = ["Experimental"]}
+unwinder = {version = "0.1.3", features = ["Experimental"]}
 ```
 
 The main functionality of this feature has been wrapped in the following macros:
