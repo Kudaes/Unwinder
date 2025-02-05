@@ -14,11 +14,11 @@ strip = true
 Experimental = ["lazy_static"]
 
 [dependencies]
-dinvoke_rs = "0.1.6"
+dinvoke_rs = "=0.2.0"
 bitreader = "0.3.8"
 nanorand = "0.7.0"
 winapi = "0.3.9"
-litcrypt2 = "0.1.2"
+litcrypt2 = "=0.1.2"
 lazy_static = {version = "1.4.0", optional = true}
 
 [build-dependencies]
