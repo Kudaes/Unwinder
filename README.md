@@ -201,7 +201,7 @@ To use the stack replacement functionality you should add the following line to 
 
 ```rust
 [dependencies]
-unwinder = {version = "0.1.3", features = ["Experimental"]}
+unwinder = {version = "0.1.4", features = ["Experimental"]}
 ```
 
 The main functionality of this feature has been wrapped in the following macros:
