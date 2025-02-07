@@ -49,7 +49,7 @@ Import this crate into your project by adding the following line to your `cargo.
 
 ```rust
 [dependencies]
-unwinder = "0.1.3"
+unwinder = "=0.1.4"
 ```
 
 The main functionality of this crate has been wrapped in two macros:
